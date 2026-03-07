@@ -14,7 +14,7 @@ export default function CalendarPage() {
     const [showModal, setShowModal] = useState(false);
     const [editingEvent, setEditingEvent] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [form, setForm] = useState({ date: '', title: '', description: '' });
+    const [form, setForm] = useState({ date: '', title: '', description: '', isHoliday: false });
 
     useEffect(() => {
         fetchData();
@@ -57,7 +57,7 @@ export default function CalendarPage() {
         }
     };
 
-    const resetForm = () => { setForm({ date: '', title: '', description: '' }); setEditingEvent(null); };
+    const resetForm = () => { setForm({ date: '', title: '', description: '', isHoliday: false }); setEditingEvent(null); };
 
     const handleDelete = async (id) => {
         if (!confirm("Delete this event?")) return;
@@ -101,11 +101,14 @@ export default function CalendarPage() {
                         </span>
                     </div>
                     <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{event.title}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{event.title}</span>
+                            {event.isHoliday && <span className="badge badge-danger" style={{ fontSize: '0.625rem' }}>Holiday</span>}
+                        </div>
                         <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>{event.description}</div>
                     </div>
                     <div style={{ display: 'flex', gap: '0.25rem' }}>
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { setEditingEvent(event); setForm({ date: event.date, title: event.title, description: event.description }); setShowModal(true); }}><FiEdit2 /></button>
+                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { setEditingEvent(event); setForm({ date: event.date, title: event.title, description: event.description || '', isHoliday: event.isHoliday || false }); setShowModal(true); }}><FiEdit2 /></button>
                         <button className="btn btn-ghost btn-icon btn-sm" onClick={() => handleDelete(event.id)}><FiTrash2 style={{ color: 'var(--color-danger)' }} /></button>
                     </div>
                 </div>
@@ -118,6 +121,10 @@ export default function CalendarPage() {
                 <div className="input-group"><label className="input-label">Date *</label><input className="input" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></div>
                 <div className="input-group"><label className="input-label">Title *</label><input className="input" placeholder="e.g. Independence Day" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} /></div>
                 <div className="input-group"><label className="input-label">Description</label><textarea className="input" placeholder="Event details..." value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <input type="checkbox" id="isHoliday" checked={form.isHoliday} onChange={e => setForm({ ...form, isHoliday: e.target.checked })} style={{ width: 18, height: 18, accentColor: 'var(--color-danger)' }} />
+                    <label htmlFor="isHoliday" style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)' }}>Mark as Holiday (no attendance on this day)</label>
+                </div>
             </div>
         </Modal>
     </div>

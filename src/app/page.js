@@ -83,16 +83,16 @@ export default function LoginPage() {
       <div style={styles.bgDecor1} />
       <div style={styles.bgDecor2} />
 
-      <div style={styles.container}>
+      <div className="login-container">
         {/* Left panel - branding */}
-        <div style={styles.brandPanel}>
+        <div className="login-brand-panel">
           <div style={styles.brandContent}>
-            <div style={styles.logoIcon}>🎓</div>
-            <h1 style={styles.brandTitle}>School Management System</h1>
-            <p style={styles.brandSubtitle}>
+            <div className="logo-icon" style={styles.logoIcon}>🎓</div>
+            <h1 className="brand-title" style={styles.brandTitle}>School Management System</h1>
+            <p className="brand-subtitle" style={styles.brandSubtitle}>
               A complete platform for managing academics, attendance, examinations, and school administration efficiently.
             </p>
-            <div style={styles.featureList}>
+            <div className="feature-list" style={styles.featureList}>
               {['Academic Tracking', 'Attendance Management', 'Exam & Results', 'Timetable Management'].map((f) => (
                 <div key={f} style={styles.featureItem}>
                   <span style={styles.featureCheck}>✓</span>
@@ -104,10 +104,10 @@ export default function LoginPage() {
         </div>
 
         {/* Right panel - login form */}
-        <div style={styles.formPanel}>
+        <div className="login-form-panel">
           <div style={styles.formContainer}>
             <div style={styles.formHeader}>
-              <h2 style={styles.formTitle}>Welcome Back</h2>
+              <h2 className="form-title" style={styles.formTitle}>Welcome Back</h2>
               <p style={styles.formSubtitle}>Sign in to your account to continue</p>
             </div>
 
@@ -239,28 +239,7 @@ const styles = {
     bottom: '-80px',
     left: '-80px',
   },
-  container: {
-    display: 'flex',
-    width: '100%',
-    maxWidth: '960px',
-    minHeight: '600px',
-    background: '#fff',
-    borderRadius: '1.25rem',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.05)',
-    overflow: 'hidden',
-    position: 'relative',
-    zIndex: 1,
-  },
-  brandPanel: {
-    flex: '1 1 45%',
-    background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #4338ca 100%)',
-    padding: '3rem 2.5rem',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    overflow: 'hidden',
-  },
+
   brandContent: {
     position: 'relative',
     zIndex: 1,
@@ -307,13 +286,7 @@ const styles = {
     fontWeight: 700,
     flexShrink: 0,
   },
-  formPanel: {
-    flex: '1 1 55%',
-    padding: '2.5rem',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
   formContainer: {
     width: '100%',
     maxWidth: '380px',

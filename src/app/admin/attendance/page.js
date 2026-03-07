@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { formatDateInput } from '@/lib/utils';
 import { FiCheckSquare, FiCalendar, FiSave, FiUsers } from 'react-icons/fi';
-import { getClasses, getSections, getStudents, getAttendanceByDate, saveAttendance } from '@/lib/dataService';
+import { getClasses, getSections, getStudents, getAttendanceByDate, saveAttendance, getHolidays } from '@/lib/dataService';
 
 export default function AttendancePage() {
     const toast = useToast();
@@ -19,6 +19,9 @@ export default function AttendancePage() {
     const [attendance, setAttendance] = useState({});
     const [saved, setSaved] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [holidays, setHolidays] = useState([]);
+    const [isHolidayOrSunday, setIsHolidayOrSunday] = useState(false);
+    const [holidayReason, setHolidayReason] = useState('');
 
     useEffect(() => {
         fetchInitialData();
@@ -27,18 +30,33 @@ export default function AttendancePage() {
     // Also fetch attendance whenever class, section, or date changes
     useEffect(() => {
         if (selectedClass && selectedSection && selectedDate) {
+            // Check Sunday/holiday first
+            const dateObj = new Date(selectedDate + 'T00:00:00');
+            if (dateObj.getDay() === 0) {
+                setIsHolidayOrSunday(true);
+                setHolidayReason('Sunday is a weekly off. No attendance can be marked.');
+                return;
+            }
+            if (holidays.includes(selectedDate)) {
+                setIsHolidayOrSunday(true);
+                setHolidayReason('This date is marked as a holiday. No attendance can be marked.');
+                return;
+            }
+            setIsHolidayOrSunday(false);
+            setHolidayReason('');
             fetchAttendanceRecord();
         }
-    }, [selectedClass, selectedSection, selectedDate]);
+    }, [selectedClass, selectedSection, selectedDate, holidays]);
 
     const fetchInitialData = async () => {
         try {
-            const [cData, sData, stData] = await Promise.all([
-                getClasses(), getSections(), getStudents()
+            const [cData, sData, stData, hData] = await Promise.all([
+                getClasses(), getSections(), getStudents(), getHolidays()
             ]);
             setClasses(cData);
             setSections(sData);
             setStudents(stData);
+            setHolidays(hData);
         } catch (error) {
             toast.error("Failed to load initial data");
             console.error(error);
@@ -151,7 +169,17 @@ export default function AttendancePage() {
                 </div>
             </div>
 
-            {selectedClass && selectedSection && filteredStudents.length > 0 && (
+            {selectedClass && selectedSection && isHolidayOrSunday && (
+                <div className="card" style={{ marginBottom: '1rem' }}>
+                    <div className="empty-state">
+                        <div className="empty-state-icon">🏖️</div>
+                        <div className="empty-state-title">{holidayReason}</div>
+                        <div className="empty-state-text">Please select a working day to mark attendance.</div>
+                    </div>
+                </div>
+            )}
+
+            {selectedClass && selectedSection && !isHolidayOrSunday && filteredStudents.length > 0 && (
                 <>
                     {/* Summary */}
                     <div className="grid-stats" style={{ marginBottom: '1rem' }}>
@@ -207,7 +235,7 @@ export default function AttendancePage() {
                 </>
             )}
 
-            {selectedClass && selectedSection && filteredStudents.length === 0 && (
+            {selectedClass && selectedSection && !isHolidayOrSunday && filteredStudents.length === 0 && (
                 <div className="card"><div className="empty-state"><div className="empty-state-icon">📋</div><div className="empty-state-title">No students in this section</div></div></div>
             )}
 

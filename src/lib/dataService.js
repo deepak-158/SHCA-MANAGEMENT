@@ -93,6 +93,14 @@ export const getCalendarEvents = async () => {
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
+export const getHolidays = async () => {
+    const querySnapshot = await getDocs(query(collection(db, 'calendarEvents'), orderBy('date', 'asc')));
+    return querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(e => e.isHoliday)
+        .map(e => e.date);
+};
+
 export const addCalendarEvent = async (eventData) => {
     return await addDoc(collection(db, 'calendarEvents'), { ...eventData, createdAt: serverTimestamp() });
 };
