@@ -41,6 +41,7 @@ const teacherNavItems = [
     { href: '/teacher/attendance', icon: <FiCheckSquare />, label: 'Attendance' },
     { href: '/teacher/leave', icon: <FiClipboard />, label: 'Leave Requests' },
     { label: 'Academics', section: 'ACADEMICS' },
+    { href: '/teacher/students', icon: <FiUsers />, label: 'My Students' },
     { href: '/teacher/timetable', icon: <FiClock />, label: 'My Timetable' },
     { href: '/teacher/marks', icon: <FiEdit3 />, label: 'Enter Marks' },
     { href: '/teacher/calendar', icon: <FiCalendar />, label: 'Calendar' },

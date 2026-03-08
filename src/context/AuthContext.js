@@ -26,6 +26,8 @@ async function enrichTeacherData(userData) {
                 ...userData,
                 classTeacherOf: td.classTeacherOf || userData.classTeacherOf || null,
                 isClassTeacher: td.isClassTeacher || userData.isClassTeacher || false,
+                assignedClasses: td.assignedClasses || [],
+                subjectsTaught: td.subjectsTaught || [],
             };
         }
     } catch (e) {

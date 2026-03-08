@@ -189,7 +189,7 @@ export default function TimetablePage() {
                         <label className="input-label">Section</label>
                         <select className="input" value={selectedSection} onChange={e => setSelectedSection(e.target.value)} disabled={!selectedClass}>
                             <option value="">Select</option>
-                            {sections.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                            {filteredSections.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                         </select>
                     </div>
                     <button className="btn btn-secondary btn-sm" onClick={() => setShowTimingEditor(!showTimingEditor)} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>

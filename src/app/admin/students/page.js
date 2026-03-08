@@ -321,6 +321,24 @@ export default function StudentsPage() {
         toast.success('Template downloaded');
     };
 
+    const downloadStudentList = () => {
+        if (filtered.length === 0) { toast.error('No students to download'); return; }
+        const classLabel = filterClass ? (classes.find(c => c.id === filterClass)?.name || filterClass) : 'All_Classes';
+        const sectionLabel = filterSection || 'All_Sections';
+
+        let csv = 'Sr No,Admission No,Name,Gender,DOB,Class,Section,Roll No,Parent Name,Parent Contact,Parent Email,Address\n';
+        filtered.forEach((s, idx) => {
+            csv += `${idx + 1},${s.admissionNumber || ''},"${s.name || ''}",${s.gender || ''},${s.dob || ''},"${getClassName(s.class)}",${s.section || ''},${s.rollNumber || ''},"${s.parentName || ''}",${s.parentContact || ''},${s.parentEmail || ''},"${(s.address || '').replace(/"/g, '""')}"\n`;
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `students_${classLabel}_${sectionLabel}.csv`; a.click();
+        URL.revokeObjectURL(url);
+        toast.success(`Downloaded ${filtered.length} student records`);
+    };
+
     const copyToClipboard = (text) => {
         navigator.clipboard.writeText(text);
         toast.success('Copied');
@@ -364,6 +382,9 @@ export default function StudentsPage() {
                     </select>
                 )}
                 <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>{filtered.length} student{filtered.length !== 1 ? 's' : ''}</span>
+                <button className="btn btn-secondary btn-sm" onClick={downloadStudentList} title="Download student list as CSV">
+                    <FiDownload /> Download List
+                </button>
             </div>
 
             {/* Table */}

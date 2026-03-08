@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getGreeting, formatDate } from '@/lib/utils';
-import { FiUsers, FiCheckSquare, FiClipboard, FiCalendar, FiArrowRight } from 'react-icons/fi';
+import { FiUsers, FiCheckSquare, FiClipboard, FiCalendar, FiArrowRight, FiDownload } from 'react-icons/fi';
 import Link from 'next/link';
 import { getClasses, getStudents, getLeaveRequests, getCalendarEvents } from '@/lib/dataService';
 
@@ -54,6 +54,24 @@ export default function TeacherDashboard() {
         }
     };
 
+    const downloadStudentList = () => {
+        if (myStudents.length === 0) return;
+        const className = myClass?.name || 'Class';
+        const section = isClassTeacher?.section || '';
+
+        let csv = 'Sr No,Name,Gender,DOB,Roll No,Parent Name,Parent Contact,Parent Email,Address\n';
+        const sorted = [...myStudents].sort((a, b) => (a.rollNumber || 0) - (b.rollNumber || 0));
+        sorted.forEach((s, idx) => {
+            csv += `${idx + 1},"${s.name || ''}",${s.gender || ''},${s.dob || ''},${s.rollNumber || ''},"${s.parentName || ''}",${s.parentContact || ''},${s.parentEmail || ''},"${(s.address || '').replace(/"/g, '""')}"\n`;
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `students_${className}_${section}.csv`; a.click();
+        URL.revokeObjectURL(url);
+    };
+
     if (loading) return <div className="page-header"><h1 className="page-title">Loading Dashboard...</h1></div>;
 
     return (
@@ -68,7 +86,14 @@ export default function TeacherDashboard() {
             <div className="grid-stats" style={{ marginBottom: '1.5rem' }}>
                 {isClassTeacher && (
                     <>
-                        <div className="stat-card"><div className="stat-icon stat-icon-primary"><FiUsers /></div><div className="stat-info"><div className="stat-value">{myStudents.length}</div><div className="stat-label">My Students</div></div></div>
+                        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={downloadStudentList} title="Click to download student list">
+                            <div className="stat-icon stat-icon-primary"><FiUsers /></div>
+                            <div className="stat-info">
+                                <div className="stat-value">{myStudents.length}</div>
+                                <div className="stat-label">My Students</div>
+                            </div>
+                            <FiDownload style={{ color: 'var(--color-text-muted)', marginLeft: 'auto' }} />
+                        </div>
                         <div className="stat-card"><div className="stat-icon stat-icon-accent"><FiClipboard /></div><div className="stat-info"><div className="stat-value">{pendingLeaves}</div><div className="stat-label">Pending Leaves</div></div></div>
                     </>
                 )}
@@ -96,6 +121,12 @@ export default function TeacherDashboard() {
                             <span className="sidebar-link-icon" style={{ color: 'var(--color-primary)' }}><FiCheckSquare /></span>
                             Enter Marks <FiArrowRight style={{ marginLeft: 'auto' }} />
                         </Link>
+                        {isClassTeacher && myStudents.length > 0 && (
+                            <button onClick={downloadStudentList} className="sidebar-link" style={{ color: 'var(--color-text)', background: 'var(--color-bg)', borderRadius: '0.5rem', padding: '0.75rem', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center' }}>
+                                <span className="sidebar-link-icon" style={{ color: 'var(--color-info)' }}><FiDownload /></span>
+                                Download Student List <FiArrowRight style={{ marginLeft: 'auto' }} />
+                            </button>
+                        )}
                     </div>
                 </div>
 

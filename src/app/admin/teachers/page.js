@@ -8,13 +8,14 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import Modal from '@/components/ui/Modal';
 import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiMail, FiPhone, FiBookOpen, FiKey, FiCopy, FiRefreshCw } from 'react-icons/fi';
-import { getTeachers, getClasses, getSections, addTeacher, updateTeacher, deleteTeacher, addAuditLog, updateUserRoleByEmail } from '@/lib/dataService';
+import { getTeachers, getClasses, getSections, addTeacher, updateTeacher, deleteTeacher, addAuditLog, updateUserRoleByEmail, getTimetable } from '@/lib/dataService';
 
 export default function TeachersPage() {
     const toast = useToast();
     const [teachers, setTeachers] = useState([]);
     const [classes, setClasses] = useState([]);
     const [sections, setSections] = useState([]);
+    const [timetable, setTimetable] = useState([]);
     const [loading, setLoading] = useState(true);
 
     const [showModal, setShowModal] = useState(false);
@@ -34,12 +35,13 @@ export default function TeachersPage() {
 
     const fetchData = async () => {
         try {
-            const [tData, cData, sData] = await Promise.all([
-                getTeachers(), getClasses(), getSections()
+            const [tData, cData, sData, ttData] = await Promise.all([
+                getTeachers(), getClasses(), getSections(), getTimetable()
             ]);
             setTeachers(tData);
-            setClasses(cData);
+            setClasses(cData.sort((a, b) => (a.order || 0) - (b.order || 0)));
             setSections(sData);
+            setTimetable(ttData);
         } catch (error) {
             toast.error("Failed to load teachers data");
             console.error(error);
@@ -52,6 +54,46 @@ export default function TeachersPage() {
         t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.email.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    // Compute classes assigned via timetable for a given teacher
+    const getTimetableClasses = (teacherId) => {
+        if (!teacherId) return [];
+        const entries = timetable.filter(t => t.teacherId === teacherId);
+        const unique = new Map();
+        entries.forEach(e => {
+            const sec = sections.find(s => s.id === e.sectionId);
+            if (sec) {
+                const key = `${e.classId}|${sec.name}`;
+                if (!unique.has(key)) unique.set(key, { class: e.classId, section: sec.name });
+            }
+        });
+        return [...unique.values()];
+    };
+
+    // Get all assigned classes for a teacher (stored + timetable + class teacher)
+    const getAllAssignedClasses = (teacher) => {
+        const pairs = new Map();
+        const addPair = (classId, sectionName) => {
+            const key = `${classId}|${sectionName}`;
+            if (!pairs.has(key)) pairs.set(key, { class: classId, section: sectionName });
+        };
+        // From stored assignedClasses
+        (teacher.assignedClasses || []).forEach(ac => {
+            if (typeof ac === 'object' && ac.class && ac.section) addPair(ac.class, ac.section);
+            else if (typeof ac === 'string') {
+                sections.filter(s => s.classId === ac).forEach(s => addPair(ac, s.name));
+            }
+        });
+        // From timetable
+        getTimetableClasses(teacher.id).forEach(tc => addPair(tc.class, tc.section));
+        // From classTeacherOf
+        if (teacher.isClassTeacher && teacher.classTeacherOf?.class && teacher.classTeacherOf?.section) {
+            addPair(teacher.classTeacherOf.class, teacher.classTeacherOf.section);
+        }
+        return [...pairs.values()];
+    };
+
+    const timetableClasses = editingTeacher ? getTimetableClasses(editingTeacher.id) : [];
 
     const resetForm = () => {
         setForm({
@@ -69,13 +111,15 @@ export default function TeachersPage() {
 
     const handleOpenEdit = (teacher) => {
         setEditingTeacher(teacher);
+        // Normalize assignedClasses: filter out old string format entries, keep only {class, section} objects
+        const normalizedClasses = (teacher.assignedClasses || []).filter(ac => typeof ac === 'object' && ac.class && ac.section);
         setForm({
             name: teacher.name,
             qualification: teacher.qualification || '',
             contact: teacher.contact || '',
             email: teacher.email,
             subjectsTaught: teacher.subjectsTaught?.join(', ') || '',
-            assignedClasses: teacher.assignedClasses || [],
+            assignedClasses: normalizedClasses,
             isClassTeacher: teacher.isClassTeacher || false,
             classTeacherClass: teacher.classTeacherOf?.class || '',
             classTeacherSection: teacher.classTeacherOf?.section || '',
@@ -109,13 +153,28 @@ export default function TeachersPage() {
 
         setIsSubmitting(true);
         try {
+            // Merge manually selected + timetable + class teacher auto-assigned classes
+            const allAssigned = [...form.assignedClasses];
+            // Add timetable classes
+            timetableClasses.forEach(tc => {
+                if (!allAssigned.some(ac => ac.class === tc.class && ac.section === tc.section)) {
+                    allAssigned.push(tc);
+                }
+            });
+            // Add class teacher's own class
+            if (form.isClassTeacher && form.classTeacherClass && form.classTeacherSection) {
+                if (!allAssigned.some(ac => ac.class === form.classTeacherClass && ac.section === form.classTeacherSection)) {
+                    allAssigned.push({ class: form.classTeacherClass, section: form.classTeacherSection });
+                }
+            }
+
             const teacherData = {
                 name: form.name,
                 qualification: form.qualification,
                 contact: form.contact,
                 email: form.email,
                 subjectsTaught: form.subjectsTaught.split(',').map(s => s.trim()).filter(Boolean),
-                assignedClasses: form.assignedClasses,
+                assignedClasses: allAssigned,
                 isClassTeacher: form.isClassTeacher,
                 classTeacherOf: form.isClassTeacher ? { class: form.classTeacherClass, section: form.classTeacherSection } : null,
             };
@@ -278,6 +337,7 @@ export default function TeachersPage() {
                             <th>Subjects</th>
                             <th>Role</th>
                             <th>Class Teacher Of</th>
+                            <th>Assigned Classes</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -315,6 +375,19 @@ export default function TeachersPage() {
                                     ) : (
                                         <span style={{ color: 'var(--color-text-muted)' }}>—</span>
                                     )}
+                                </td>
+                                <td>
+                                    <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                                        {(() => {
+                                            const allClasses = getAllAssignedClasses(teacher);
+                                            return allClasses.length > 0
+                                                ? allClasses.map((ac, i) => {
+                                                    const label = `${classes.find(c => c.id === ac.class)?.name || ac.class} - ${ac.section}`;
+                                                    return <span key={i} className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>{label}</span>;
+                                                })
+                                                : <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
+                                        })()}
+                                    </div>
                                 </td>
                                 <td>
                                     <div style={{ display: 'flex', gap: '0.25rem' }}>
@@ -375,6 +448,43 @@ export default function TeachersPage() {
                     <div className="input-group grid-form-full">
                         <label className="input-label">Subjects Taught (comma-separated)</label>
                         <input className="input" placeholder="e.g. Mathematics, Physics" value={form.subjectsTaught} onChange={e => setForm({ ...form, subjectsTaught: e.target.value })} />
+                    </div>
+                    <div className="input-group grid-form-full">
+                        <label className="input-label">Assigned Classes (classes &amp; sections this teacher teaches)</label>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', padding: '0.5rem', border: '1px solid var(--color-border)', borderRadius: '0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
+                            {classes.map(c => {
+                                const classSections = sections.filter(s => s.classId === c.id);
+                                if (classSections.length === 0) return null;
+                                return classSections.map(sec => {
+                                    const key = `${c.id}|${sec.name}`;
+                                    const isChecked = form.assignedClasses.some(ac => ac.class === c.id && ac.section === sec.name);
+                                    const isFromTimetable = timetableClasses.some(tc => tc.class === c.id && tc.section === sec.name);
+                                    const isClassTeacherClass = form.isClassTeacher && form.classTeacherClass === c.id && form.classTeacherSection === sec.name;
+                                    const isAutoAssigned = isFromTimetable || isClassTeacherClass;
+                                    return (
+                                        <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: isAutoAssigned ? 'default' : 'pointer', fontSize: '0.8125rem', whiteSpace: 'nowrap', opacity: isAutoAssigned ? 0.7 : 1 }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={isChecked || isAutoAssigned}
+                                                disabled={isAutoAssigned}
+                                                onChange={e => {
+                                                    const entry = { class: c.id, section: sec.name };
+                                                    const updated = e.target.checked
+                                                        ? [...form.assignedClasses, entry]
+                                                        : form.assignedClasses.filter(ac => !(ac.class === c.id && ac.section === sec.name));
+                                                    setForm({ ...form, assignedClasses: updated });
+                                                }}
+                                                style={{ width: 14, height: 14, accentColor: 'var(--color-primary)' }}
+                                            />
+                                            {c.name} - {sec.name}
+                                            {isFromTimetable && <span style={{ fontSize: '0.625rem', color: 'var(--color-text-muted)' }}>(TT)</span>}
+                                            {isClassTeacherClass && <span style={{ fontSize: '0.625rem', color: 'var(--color-text-muted)' }}>(CT)</span>}
+                                        </label>
+                                    );
+                                });
+                            })}
+                        </div>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>TT = from timetable, CT = class teacher (auto-assigned)</span>
                     </div>
                     <div className="input-group grid-form-full">
                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.875rem' }}>

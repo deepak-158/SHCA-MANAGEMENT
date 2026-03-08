@@ -358,8 +358,11 @@ export default function ClassesPage() {
                     return (
                         <div key={cls.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
                             {/* Class header */}
-                            <button
+                            <div
                                 onClick={() => toggleClass(cls.id)}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleClass(cls.id); }}
                                 style={{
                                     width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                     padding: '1rem 1.25rem', background: 'none', border: 'none', cursor: 'pointer',
@@ -398,7 +401,7 @@ export default function ClassesPage() {
                                         <FiTrash2 style={{ color: 'var(--color-danger)', fontSize: '0.875rem' }} />
                                     </button>
                                 </div>
-                            </button>
+                            </div>
 
                             {/* Expanded sections */}
                             {isExpanded && classSections.length > 0 && (
