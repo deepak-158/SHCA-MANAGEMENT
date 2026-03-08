@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { formatDateInput } from '@/lib/utils';
 import { FiCheckSquare, FiCalendar, FiSave, FiUsers } from 'react-icons/fi';
-import { getClasses, getSections, getStudents, getAttendanceByDate, saveAttendance, getHolidays } from '@/lib/dataService';
+import { getClasses, getSections, getStudents, getAttendanceByDate, saveAttendance, getHolidays, getLeaveRequests } from '@/lib/dataService';
 
 export default function AttendancePage() {
     const toast = useToast();
@@ -67,16 +67,29 @@ export default function AttendancePage() {
 
     const fetchAttendanceRecord = async () => {
         try {
-            const records = await getAttendanceByDate(selectedClass, selectedSection, selectedDate);
+            const [records, leavesData] = await Promise.all([
+                getAttendanceByDate(selectedClass, selectedSection, selectedDate),
+                getLeaveRequests()
+            ]);
             const map = {};
+
+            // Build set of studentIds on approved leave for selectedDate
+            const onLeaveIds = new Set();
+            leavesData.forEach(l => {
+                if (l.status === 'Approved' && l.startDate && l.endDate) {
+                    if (selectedDate >= l.startDate && selectedDate <= l.endDate) {
+                        onLeaveIds.add(l.studentId);
+                    }
+                }
+            });
 
             if (records.length > 0) {
                 // Load existing
                 records[0].records.forEach(r => { map[r.studentId] = r.status; });
             } else {
-                // Default to present for all students in this section
+                // Default: 'Leave' for students on approved leave, 'Present' for others
                 const sectionStudents = students.filter(s => s.class === selectedClass && s.section === selectedSection);
-                sectionStudents.forEach(s => { map[s.id] = 'Present'; });
+                sectionStudents.forEach(s => { map[s.id] = onLeaveIds.has(s.id) ? 'Leave' : 'Present'; });
             }
             setAttendance(map);
             setSaved(records.length > 0);

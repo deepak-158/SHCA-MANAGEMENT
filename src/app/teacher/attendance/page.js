@@ -4,7 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/ui/Toast';
 import { formatDateInput } from '@/lib/utils';
 import { FiSave, FiUsers, FiCheckSquare, FiCalendar, FiDownload } from 'react-icons/fi';
-import { getStudents, getAttendance, saveAttendance, getClasses, getHolidays, getAttendanceRecords } from '@/lib/dataService';
+import { getStudents, getAttendance, saveAttendance, getClasses, getHolidays, getAttendanceRecords, getLeaveRequests } from '@/lib/dataService';
 
 export default function TeacherAttendancePage() {
     const toast = useToast();
@@ -79,10 +79,11 @@ export default function TeacherAttendancePage() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [stData, existingAtt, cData] = await Promise.all([
+            const [stData, existingAtt, cData, leavesData] = await Promise.all([
                 getStudents(),
                 getAttendance(classInfo.class, classInfo.section, selectedDate),
-                getClasses()
+                getClasses(),
+                getLeaveRequests()
             ]);
 
             const classDoc = cData.find(c => c.id === classInfo.class);
@@ -91,17 +92,27 @@ export default function TeacherAttendancePage() {
             const mySt = stData.filter(s => s.class === classInfo.class && s.section === classInfo.section);
             setStudents(mySt);
 
+            // Build set of studentIds on approved leave for selectedDate
+            const onLeaveIds = new Set();
+            leavesData.forEach(l => {
+                if (l.status === 'Approved' && l.startDate && l.endDate) {
+                    if (selectedDate >= l.startDate && selectedDate <= l.endDate) {
+                        onLeaveIds.add(l.studentId);
+                    }
+                }
+            });
+
             const map = {};
             if (existingAtt && existingAtt.records) {
                 existingAtt.records.forEach(r => {
                     map[r.studentId] = r.status;
                 });
                 mySt.forEach(s => {
-                    if (!map[s.id]) map[s.id] = 'Present';
+                    if (!map[s.id]) map[s.id] = onLeaveIds.has(s.id) ? 'Leave' : 'Present';
                 });
                 setSaved(true);
             } else {
-                mySt.forEach(s => { map[s.id] = 'Present'; });
+                mySt.forEach(s => { map[s.id] = onLeaveIds.has(s.id) ? 'Leave' : 'Present'; });
                 setSaved(false);
             }
             setAttendance(map);
