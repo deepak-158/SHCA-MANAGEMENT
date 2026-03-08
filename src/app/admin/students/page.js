@@ -23,6 +23,9 @@ export default function StudentsPage() {
     const [showImport, setShowImport] = useState(false);
     const [editingStudent, setEditingStudent] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [importClass, setImportClass] = useState('');
+    const [importSection, setImportSection] = useState('');
+    const [importProgress, setImportProgress] = useState('');
 
     const [searchQuery, setSearchQuery] = useState('');
     const [filterClass, setFilterClass] = useState('');
@@ -198,32 +201,49 @@ export default function StudentsPage() {
         const file = e.target.files[0];
         if (!file) return;
 
+        if (!importClass || !importSection) {
+            toast.error('Please select class and section first');
+            e.target.value = '';
+            return;
+        }
+
         setIsSubmitting(true);
+        setImportProgress('Reading file...');
         const reader = new FileReader();
 
         reader.onload = async (event) => {
             try {
                 const text = event.target.result;
-                const lines = text.split('\n').filter(Boolean);
+                const lines = text.split('\n').filter(l => l.trim());
                 if (lines.length < 2) {
                     toast.error('CSV file is empty or invalid');
                     setIsSubmitting(false);
+                    setImportProgress('');
                     return;
                 }
 
                 const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-                const importedPromises = [];
+                const totalRows = lines.length - 1;
+                let successCount = 0;
+                let failCount = 0;
+
+                // Get existing students count for ID generation
+                const existingCount = students.length;
 
                 for (let i = 1; i < lines.length; i++) {
                     const values = lines[i].split(',').map(v => v.trim());
                     const row = {};
                     headers.forEach((h, idx) => { row[h] = values[idx] || ''; });
 
-                    const newId = `S${String(students.length + i).padStart(3, '0')}`;
+                    if (!row.name) { failCount++; continue; }
+
+                    setImportProgress(`Importing ${i} of ${totalRows}...`);
+
+                    const newId = `S${String(existingCount + i).padStart(3, '0')}`;
                     const parentEmail = row.parentemail || row['parent email'] || '';
                     const studentData = {
                         id: newId,
-                        name: row.name || '',
+                        name: row.name,
                         gender: row.gender || 'Male',
                         dob: row.dob || '',
                         address: row.address || '',
@@ -232,49 +252,59 @@ export default function StudentsPage() {
                         parentEmail,
                         admissionNumber: row.admissionnumber || row['admission number'] || `ADM${Date.now()}${i}`,
                         rollNumber: parseInt(row.rollnumber || row['roll number']) || i,
-                        class: row.class || '',
-                        section: row.section || '',
+                        class: importClass,
+                        section: importSection,
                     };
 
-                    // Create auth account if email provided
-                    if (parentEmail) {
-                        const creds = createCredentials(row.name || '', 'student', newId);
-                        try {
-                            await createUserAccount(parentEmail, creds.tempPassword, {
-                                name: row.name || '',
-                                role: 'student',
-                                studentId: newId,
-                            });
-                            studentData.loginEmail = parentEmail;
-                            // Send credentials email (fire and forget)
-                            fetch('/api/send-credentials', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    to: parentEmail,
-                                    name: row.name || '',
-                                    email: parentEmail,
-                                    tempPassword: creds.tempPassword,
+                    try {
+                        // Create auth account if email provided
+                        if (parentEmail) {
+                            const creds = createCredentials(row.name, 'student', newId);
+                            try {
+                                await createUserAccount(parentEmail, creds.tempPassword, {
+                                    name: row.name,
                                     role: 'student',
-                                }),
-                            }).catch(() => {});
-                        } catch (authErr) {
-                            console.error(`Account creation failed for ${parentEmail}:`, authErr);
+                                    studentId: newId,
+                                });
+                                studentData.loginEmail = parentEmail;
+                                fetch('/api/send-credentials', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        to: parentEmail,
+                                        name: row.name,
+                                        email: parentEmail,
+                                        tempPassword: creds.tempPassword,
+                                        role: 'student',
+                                    }),
+                                }).catch(() => {});
+                            } catch (authErr) {
+                                console.error(`Account creation failed for ${parentEmail}:`, authErr);
+                            }
                         }
-                    }
 
-                    importedPromises.push(addStudent(studentData));
+                        await addStudent(studentData);
+                        successCount++;
+                    } catch (err) {
+                        console.error(`Failed to import row ${i}:`, err);
+                        failCount++;
+                    }
                 }
 
-                await Promise.all(importedPromises);
-                toast.success(`${importedPromises.length} students imported! Credentials generated.`);
+                const msg = `Imported ${successCount} student${successCount !== 1 ? 's' : ''}${failCount > 0 ? ` (${failCount} failed)` : ''}`;
+                if (successCount > 0) toast.success(msg);
+                else toast.error('No students were imported');
+
                 setShowImport(false);
+                setImportClass('');
+                setImportSection('');
                 fetchData();
             } catch (error) {
                 toast.error("Error importing students");
                 console.error(error);
             } finally {
                 setIsSubmitting(false);
+                setImportProgress('');
                 e.target.value = '';
             }
         };
@@ -282,7 +312,7 @@ export default function StudentsPage() {
     };
 
     const downloadCSVTemplate = () => {
-        const csv = 'Name,Gender,DOB,Address,ParentName,ParentContact,ParentEmail,AdmissionNumber,RollNumber,Class,Section\nJohn Doe,Male,2014-05-12,123 Main St,Mr. Doe,9800000001,parent@email.com,ADM2024100,1,class-5,A\n';
+        const csv = 'Name,Gender,DOB,Address,ParentName,ParentContact,ParentEmail,AdmissionNumber,RollNumber\nJohn Doe,Male,2014-05-12,123 Main St,Mr. Doe,9800000001,parent@email.com,ADM2024100,1\nJane Smith,Female,2014-08-20,456 Oak Ave,Mrs. Smith,9800000002,jane.parent@email.com,ADM2024101,2\n';
         const blob = new Blob([csv], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -403,17 +433,48 @@ export default function StudentsPage() {
             </Modal>
 
             {/* Import CSV Modal */}
-            <Modal isOpen={showImport} onClose={() => setShowImport(false)} title="📥 Bulk Import Students (CSV)"
-                footer={<button className="btn btn-secondary" onClick={() => setShowImport(false)}>Close</button>}>
+            <Modal isOpen={showImport} onClose={() => { setShowImport(false); setImportClass(''); setImportSection(''); }} title="📥 Bulk Import Students (CSV)"
+                footer={<button className="btn btn-secondary" onClick={() => { setShowImport(false); setImportClass(''); setImportSection(''); }}>Close</button>}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                    <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'var(--color-info-bg)', border: '1px dashed #93c5fd', textAlign: 'center' }}>
-                        <p style={{ fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.75rem' }}>Upload a CSV file with student records</p>
-                        <input type="file" accept=".csv" ref={fileInputRef} onChange={handleCSVImport} style={{ display: 'none' }} />
-                        <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}><FiUpload /> Choose CSV File</button>
+                    {/* Step 1: Select class and section */}
+                    <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
+                        <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--color-text)' }}>Step 1: Select Class & Section</p>
+                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                            <div className="input-group" style={{ flex: 1, minWidth: 140 }}>
+                                <label className="input-label">Class</label>
+                                <select className="input" value={importClass} onChange={e => { setImportClass(e.target.value); setImportSection(''); }}>
+                                    <option value="">Select Class</option>
+                                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="input-group" style={{ flex: 1, minWidth: 120 }}>
+                                <label className="input-label">Section</label>
+                                <select className="input" value={importSection} onChange={e => setImportSection(e.target.value)} disabled={!importClass}>
+                                    <option value="">Select</option>
+                                    {sections.filter(s => s.classId === importClass).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
                     </div>
+
+                    {/* Step 2: Upload CSV */}
+                    <div style={{ padding: '1rem', borderRadius: '0.75rem', background: importClass && importSection ? 'var(--color-info-bg)' : 'var(--color-bg)', border: `1px dashed ${importClass && importSection ? '#93c5fd' : 'var(--color-border)'}`, textAlign: 'center', opacity: importClass && importSection ? 1 : 0.5 }}>
+                        <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>Step 2: Upload CSV File</p>
+                        {importClass && importSection && (
+                            <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '0.75rem' }}>
+                                Importing to <strong>{classes.find(c => c.id === importClass)?.name} - {importSection}</strong>
+                            </p>
+                        )}
+                        <input type="file" accept=".csv" ref={fileInputRef} onChange={handleCSVImport} style={{ display: 'none' }} />
+                        <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()} disabled={!importClass || !importSection || isSubmitting}>
+                            {isSubmitting ? <><span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> {importProgress}</> : <><FiUpload /> Choose CSV File</>}
+                        </button>
+                    </div>
+
                     <button className="btn btn-secondary" onClick={downloadCSVTemplate} style={{ alignSelf: 'flex-start' }}><FiDownload /> Download CSV Template</button>
                     <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
-                        <strong>CSV Columns:</strong> Name, Gender, DOB, Address, ParentName, ParentContact, ParentEmail, AdmissionNumber, RollNumber, Class, Section
+                        <strong>CSV Columns:</strong> Name, Gender, DOB, Address, ParentName, ParentContact, ParentEmail, AdmissionNumber, RollNumber
+                        <br /><span style={{ color: 'var(--color-text-muted)' }}>Class and Section are set from the dropdown above — no need to include them in the CSV.</span>
                     </div>
                 </div>
             </Modal>
