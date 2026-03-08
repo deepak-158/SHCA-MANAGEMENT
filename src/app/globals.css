@@ -325,12 +325,12 @@ textarea.input {
 }
 
 .table {
-  width: 100%;
-  border-collapse: collapse;
+  width: 100% !important;
+  border-collapse: collapse !important;
 }
 
 .table th {
-  padding: 0.75rem 1rem;
+  padding: 0.75rem 1rem !important;
   text-align: left;
   font-size: 0.75rem;
   font-weight: 600;
@@ -343,7 +343,7 @@ textarea.input {
 }
 
 .table td {
-  padding: 0.75rem 1rem;
+  padding: 0.75rem 1rem !important;
   font-size: 0.875rem;
   color: var(--color-text);
   border-bottom: 1px solid var(--color-border);
@@ -850,6 +850,41 @@ textarea.input {
   background: var(--color-warning);
   color: #fff;
   border-color: var(--color-warning);
+}
+
+/* ============================================
+   DATA TABLE
+   ============================================ */
+table.data-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  font-size: 0.875rem;
+  table-layout: auto;
+}
+
+table.data-table th,
+table.data-table td {
+  padding: 0.75rem 1rem !important;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+table.data-table th {
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--color-bg);
+}
+
+table.data-table tbody tr:hover {
+  background: var(--color-bg);
+}
+
+table.data-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 /* ============================================
