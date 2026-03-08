@@ -107,6 +107,15 @@ export default function ClassesPage() {
     };
 
     const setTeacherForSection = (sectionName, teacherId) => {
+        // Check if this teacher is already assigned to another section in the modal
+        if (teacherId) {
+            const alreadyInModal = modalSections.find(s => s.name !== sectionName && s.classTeacherId === teacherId);
+            if (alreadyInModal) {
+                const tName = teachers.find(t => t.id === teacherId)?.name || 'This teacher';
+                toast.error(`${tName} is already assigned to Section ${alreadyInModal.name}`);
+                return;
+            }
+        }
         setModalSections(modalSections.map(s => s.name === sectionName ? { ...s, classTeacherId: teacherId } : s));
     };
 
@@ -156,6 +165,14 @@ export default function ClassesPage() {
         }
     };
 
+    // Get teacher IDs already assigned as class teacher in OTHER classes (not the one being edited)
+    const getAssignedClassTeacherIds = () => {
+        const editingClassId = editingClass?.id;
+        return sections
+            .filter(s => s.classTeacherId && s.classId !== editingClassId)
+            .map(s => s.classTeacherId);
+    };
+
     const handleSave = async () => {
         if (modalSections.length === 0) {
             toast.error('Add at least one section');
@@ -168,6 +185,18 @@ export default function ClassesPage() {
         }
 
         setIsSubmitting(true);
+
+        // Validate: no teacher assigned as class teacher in another class
+        const alreadyAssigned = getAssignedClassTeacherIds();
+        for (const sec of modalSections) {
+            if (sec.classTeacherId && alreadyAssigned.includes(sec.classTeacherId)) {
+                const tName = teachers.find(t => t.id === sec.classTeacherId)?.name || 'A teacher';
+                toast.error(`${tName} is already a class teacher of another class. A teacher can only be class teacher of one class.`);
+                setIsSubmitting(false);
+                return;
+            }
+        }
+
         try {
             if (editingClass) {
                 // EDIT MODE — sync sections
@@ -497,7 +526,13 @@ export default function ClassesPage() {
                                             onChange={(e) => setTeacherForSection(sec.name, e.target.value)}
                                         >
                                             <option value="">No Teacher</option>
-                                            {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                            {teachers.map(t => {
+                                                const assignedElsewhere = getAssignedClassTeacherIds();
+                                                const usedInModal = modalSections.find(s => s.name !== sec.name && s.classTeacherId === t.id);
+                                                const isCurrentSelection = sec.classTeacherId === t.id;
+                                                const disabled = !isCurrentSelection && (assignedElsewhere.includes(t.id) || !!usedInModal);
+                                                return <option key={t.id} value={t.id} disabled={disabled}>{t.name}{disabled ? ' (already class teacher)' : ''}</option>;
+                                            })}
                                         </select>
                                     </div>
                                 ))}
