@@ -7,6 +7,7 @@ import { EXAM_TYPES } from '@/constants';
 import { formatDate, getCurrentAcademicYear } from '@/lib/utils';
 import { FiPlus, FiEdit2, FiTrash2, FiCalendar, FiUpload, FiCheck, FiDownload } from 'react-icons/fi';
 import { getClasses, getSubjects, getExams, addExam, updateExam, deleteExam } from '@/lib/dataService';
+import { parseCSV, generateCSV, downloadCSVFile } from '@/lib/csvParser';
 
 export default function ExamsPage() {
     const toast = useToast();
@@ -161,16 +162,11 @@ export default function ExamsPage() {
 
     const downloadCsvTemplate = () => {
         const examClasses = (scheduleExam?.classIds || []).map(cid => getClassName(cid));
-        const header = 'Class,Subject,Date (YYYY-MM-DD),Start Time (HH:MM),End Time (HH:MM)';
-        const sampleRows = examClasses.slice(0, 2).map(cn => `${cn},Mathematics,2026-03-15,09:00,11:00`);
-        const csv = [header, ...sampleRows].join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `schedule_template_${scheduleExam?.name || 'exam'}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
+        const headers = ['Class', 'Subject', 'Date (YYYY-MM-DD)', 'Start Time (HH:MM)', 'End Time (HH:MM)'];
+        const sampleRows = examClasses.slice(0, 2).map(cn => [cn, 'Mathematics', '2026-03-15', '09:00', '11:00']);
+        if (sampleRows.length === 0) sampleRows.push(['Class 1', 'Mathematics', '2026-03-15', '09:00', '11:00']);
+        const csv = generateCSV(headers, sampleRows);
+        downloadCSVFile(csv, `schedule_template_${scheduleExam?.name || 'exam'}.csv`);
     };
 
     const handleCsvUpload = (e) => {
@@ -186,36 +182,47 @@ export default function ExamsPage() {
     };
 
     const parseCsv = (text) => {
-        const lines = text.split(/\r?\n/).filter(l => l.trim());
-        if (lines.length < 2) { toast.error('CSV must have a header row and at least one data row'); return; }
+        const { rows: parsedRows } = parseCSV(text);
+        if (parsedRows.length === 0) { toast.error('CSV must have a header row and at least one data row'); return; }
 
         const rows = [];
         const errors = [];
+        // Normalise header keys — strip spaces and special chars
+        // parseCSV already lowercases and strips spaces from headers
+        // Expected headers (after normalisation): 'class', 'subject', 'date(yyyy-mm-dd)', 'starttime(hh:mm)', 'endtime(hh:mm)'
+        // We'll read positionally from the raw values for robustness
+        const rawLines = text.split(/\r?\n/).filter(l => l.trim());
 
-        for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i].split(',').map(c => c.trim());
-            if (cols.length < 5) { errors.push(`Row ${i}: needs 5 columns (Class, Subject, Date, Start Time, End Time)`); continue; }
+        for (let i = 0; i < parsedRows.length; i++) {
+            const row = parsedRows[i];
+            // Support both normalised key and positional fallback
+            const className   = row['class'] || '';
+            const subjectName = row['subject'] || '';
+            const date        = (row['date(yyyy-mm-dd)'] || row['date'] || '').trim();
+            const startTime   = (row['starttime(hh:mm)'] || row['starttime'] || row['start time (hh:mm)'] || row['start'] || '').trim();
+            const endTime     = (row['endtime(hh:mm)'] || row['endtime']   || row['end time (hh:mm)']   || row['end']   || '').trim();
 
-            const [className, subjectName, date, startTime, endTime] = cols;
+            if (!className || !subjectName) { errors.push(`Row ${i + 1}: Class and Subject are required`); continue; }
+
             const classDoc = classes.find(c => c.name.toLowerCase() === className.toLowerCase());
-            if (!classDoc) { errors.push(`Row ${i}: class "${className}" not found`); continue; }
-            if (!(scheduleExam?.classIds || []).includes(classDoc.id)) { errors.push(`Row ${i}: class "${className}" not in this exam`); continue; }
+            if (!classDoc) { errors.push(`Row ${i + 1}: class "${className}" not found`); continue; }
+            if (!(scheduleExam?.classIds || []).includes(classDoc.id)) { errors.push(`Row ${i + 1}: class "${className}" not in this exam`); continue; }
 
             const classSubjects = subjects.filter(s => s.classId === classDoc.id);
             const subjectDoc = classSubjects.find(s => s.name.toLowerCase() === subjectName.toLowerCase());
-            if (!subjectDoc) { errors.push(`Row ${i}: subject "${subjectName}" not found for ${className}`); continue; }
+            if (!subjectDoc) { errors.push(`Row ${i + 1}: subject "${subjectName}" not found for ${className}`); continue; }
 
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { errors.push(`Row ${i}: invalid date format "${date}", use YYYY-MM-DD`); continue; }
-            if (!/^\d{2}:\d{2}$/.test(startTime)) { errors.push(`Row ${i}: invalid start time "${startTime}", use HH:MM`); continue; }
-            if (!/^\d{2}:\d{2}$/.test(endTime)) { errors.push(`Row ${i}: invalid end time "${endTime}", use HH:MM`); continue; }
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date))      { errors.push(`Row ${i + 1}: invalid date "${date}", use YYYY-MM-DD`); continue; }
+            if (!/^\d{2}:\d{2}$/.test(startTime))        { errors.push(`Row ${i + 1}: invalid start time "${startTime}", use HH:MM`); continue; }
+            if (!/^\d{2}:\d{2}$/.test(endTime))          { errors.push(`Row ${i + 1}: invalid end time "${endTime}", use HH:MM`); continue; }
 
             rows.push({ classId: classDoc.id, className: classDoc.name, subjectId: subjectDoc.id, subjectName: subjectDoc.name, date, startTime, endTime });
         }
 
         setCsvPreview(rows);
         setCsvErrors(errors);
-        if (rows.length > 0) toast.success(`Parsed ${rows.length} rows`);
-        if (errors.length > 0) toast.error(`${errors.length} error(s) found`);
+        if (rows.length > 0) toast.success(`Parsed ${rows.length} valid rows`);
+        if (errors.length > 0) toast.error(`${errors.length} error(s) found — check below`);
     };
 
     const handleBulkSave = async () => {

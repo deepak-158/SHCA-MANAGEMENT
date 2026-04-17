@@ -40,6 +40,7 @@ export const ROLES = {
   CLASS_TEACHER: 'class_teacher',
   SUBJECT_TEACHER: 'subject_teacher',
   STUDENT: 'student',
+  PARENT: 'parent',
 };
 
 export const GRADE_MAP = [
@@ -54,3 +55,42 @@ export const GRADE_MAP = [
 ];
 
 export const EXAM_TYPES = ['Unit Test', 'Mid Term Exam', 'Final Exam'];
+
+export const FEE_STATUS = {
+  PENDING: 'Pending',
+  PARTIAL: 'Partial',
+  PAID: 'Paid',
+  OVERDUE: 'Overdue',
+};
+
+export const FEE_TYPES = [
+  'Tuition Fee', 'Transport Fee', 'Library Fee', 'Lab Fee',
+  'Exam Fee', 'Sports Fee', 'Computer Fee', 'Activity Fee', 'Other',
+];
+
+export const FEE_FREQUENCY = {
+  MONTHLY: 'Monthly',
+  QUARTERLY: 'Quarterly',
+  HALF_YEARLY: 'Half Yearly',
+  ANNUALLY: 'Annually',
+  ONE_TIME: 'One Time',
+};
+
+export const HOMEWORK_STATUS = {
+  PENDING: 'Pending',
+  SUBMITTED: 'Submitted',
+  GRADED: 'Graded',
+  LATE: 'Late',
+  RESUBMIT: 'Resubmit',
+};
+
+export const NOTIFICATION_TYPES = {
+  ANNOUNCEMENT: 'announcement',
+  FEE_REMINDER: 'fee_reminder',
+  LEAVE_UPDATE: 'leave_update',
+  RESULT_PUBLISHED: 'result_published',
+  HOMEWORK_ASSIGNED: 'homework_assigned',
+  HOMEWORK_GRADED: 'homework_graded',
+  ATTENDANCE_ALERT: 'attendance_alert',
+  GENERAL: 'general',
+};

@@ -9,7 +9,8 @@ import {
     FiHome, FiUsers, FiBookOpen, FiCalendar, FiClock,
     FiCheckSquare, FiFileText, FiAward, FiArrowUpRight,
     FiBarChart2, FiLogOut, FiSettings, FiClipboard, FiGrid,
-    FiDownload, FiEdit3, FiX, FiMenu, FiActivity
+    FiDownload, FiEdit3, FiX, FiMenu, FiActivity,
+    FiDollarSign, FiBell, FiMessageSquare, FiBook, FiHeart
 } from 'react-icons/fi';
 
 const adminNavItems = [
@@ -19,6 +20,7 @@ const adminNavItems = [
     { href: '/admin/classes', icon: <FiGrid />, label: 'Classes & Sections' },
     { href: '/admin/teachers', icon: <FiUsers />, label: 'Teachers' },
     { href: '/admin/students', icon: <FiBookOpen />, label: 'Students' },
+    { href: '/admin/fees', icon: <FiDollarSign />, label: 'Fee Management' },
     { label: 'Academics', section: 'ACADEMICS' },
     { href: '/admin/timetable', icon: <FiClock />, label: 'Timetable' },
     { href: '/admin/syllabus', icon: <FiFileText />, label: 'Syllabus' },
@@ -29,6 +31,8 @@ const adminNavItems = [
     { href: '/admin/exams', icon: <FiEdit3 />, label: 'Examinations' },
     { href: '/admin/results', icon: <FiAward />, label: 'Results' },
     { href: '/admin/promotion', icon: <FiArrowUpRight />, label: 'Promotion' },
+    { label: 'Communication', section: 'COMMUNICATION' },
+    { href: '/admin/announcements', icon: <FiBell />, label: 'Announcements' },
     { label: 'Reports', section: 'REPORTS' },
     { href: '/admin/reports', icon: <FiBarChart2 />, label: 'Reports & Analytics' },
     { href: '/admin/audit-logs', icon: <FiActivity />, label: 'Audit Logs' },
@@ -44,7 +48,10 @@ const teacherNavItems = [
     { href: '/teacher/students', icon: <FiUsers />, label: 'My Students' },
     { href: '/teacher/timetable', icon: <FiClock />, label: 'My Timetable' },
     { href: '/teacher/marks', icon: <FiEdit3 />, label: 'Enter Marks' },
+    { href: '/teacher/homework', icon: <FiBook />, label: 'Homework' },
     { href: '/teacher/calendar', icon: <FiCalendar />, label: 'Calendar' },
+    { label: 'Communication', section: 'COMMUNICATION' },
+    { href: '/teacher/announcements', icon: <FiBell />, label: 'Announcements' },
 ];
 
 const studentNavItems = [
@@ -55,10 +62,29 @@ const studentNavItems = [
     { href: '/student/attendance', icon: <FiCheckSquare />, label: 'Attendance' },
     { href: '/student/leave', icon: <FiClipboard />, label: 'Leave Request' },
     { href: '/student/syllabus', icon: <FiDownload />, label: 'Syllabus' },
+    { href: '/student/homework', icon: <FiBook />, label: 'Homework' },
     { label: 'Examinations', section: 'EXAMS' },
     { href: '/student/exams', icon: <FiEdit3 />, label: 'Exam Schedule' },
     { href: '/student/results', icon: <FiAward />, label: 'Results' },
     { href: '/student/calendar', icon: <FiCalendar />, label: 'Calendar' },
+    { label: 'Communication', section: 'COMMUNICATION' },
+    { href: '/student/announcements', icon: <FiBell />, label: 'Announcements' },
+];
+
+const parentNavItems = [
+    { label: 'Overview', section: 'MAIN' },
+    { href: '/parent', icon: <FiHome />, label: 'Dashboard' },
+    { label: 'My Children', section: 'CHILDREN' },
+    { href: '/parent/children', icon: <FiHeart />, label: 'Children' },
+    { href: '/parent/attendance', icon: <FiCheckSquare />, label: 'Attendance' },
+    { href: '/parent/results', icon: <FiAward />, label: 'Results' },
+    { href: '/parent/timetable', icon: <FiClock />, label: 'Timetable' },
+    { href: '/parent/homework', icon: <FiBook />, label: 'Homework' },
+    { href: '/parent/leave', icon: <FiClipboard />, label: 'Leave Applications' },
+    { label: 'Finance', section: 'FINANCE' },
+    { href: '/parent/fees', icon: <FiDollarSign />, label: 'Fee Payments' },
+    { label: 'Communication', section: 'COMMUNICATION' },
+    { href: '/parent/announcements', icon: <FiBell />, label: 'Announcements' },
 ];
 
 export default function Sidebar({ sidebarOpen, onCloseSidebar }) {
@@ -70,6 +96,8 @@ export default function Sidebar({ sidebarOpen, onCloseSidebar }) {
         navItems = teacherNavItems;
     } else if (user?.role === ROLES.STUDENT) {
         navItems = studentNavItems;
+    } else if (user?.role === ROLES.PARENT) {
+        navItems = parentNavItems;
     }
 
     const roleName = {
@@ -77,6 +105,7 @@ export default function Sidebar({ sidebarOpen, onCloseSidebar }) {
         [ROLES.CLASS_TEACHER]: 'Class Teacher',
         [ROLES.SUBJECT_TEACHER]: 'Subject Teacher',
         [ROLES.STUDENT]: 'Student',
+        [ROLES.PARENT]: 'Parent',
     };
 
     return (

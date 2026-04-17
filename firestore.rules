@@ -1,0 +1,238 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ───────────────────────────────────────────────────────
+
+    // Is the request from a signed-in user?
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Get the caller's role from the users collection
+    function getRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isAuth() && getRole() == 'admin';
+    }
+
+    function isTeacher() {
+      return isAuth() && (getRole() == 'class_teacher' || getRole() == 'subject_teacher');
+    }
+
+    function isStudent() {
+      return isAuth() && getRole() == 'student';
+    }
+
+    function isParent() {
+      return isAuth() && getRole() == 'parent';
+    }
+
+    function isStaff() {
+      return isAdmin() || isTeacher();
+    }
+
+    function isSchoolUser() {
+      return isAdmin() || isTeacher() || isStudent() || isParent();
+    }
+
+
+    // ─── Users ──────────────────────────────────────────────────────────────────
+    // Each user can read their own document; admin can read/write all.
+    match /users/{userId} {
+      allow read: if isAuth() && (request.auth.uid == userId || isAdmin());
+      allow create, delete: if isAdmin();
+      allow update: if isAuth() && request.auth.uid == userId;
+    }
+
+
+    // ─── Classes & Sections ─────────────────────────────────────────────────────
+    match /classes/{docId} {
+      allow read: if isSchoolUser();
+      allow write: if isAdmin();
+    }
+
+    match /sections/{docId} {
+      allow read: if isSchoolUser();
+      allow write: if isAdmin();
+    }
+
+
+    match /students/{studentId} {
+      // The app queries all students and filters locally (client-side).
+      // So every authenticated user needs permission to read the collection.
+      allow read: if isSchoolUser();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+
+    // ─── Teachers ───────────────────────────────────────────────────────────────
+    match /teachers/{teacherId} {
+      allow read: if isSchoolUser();
+      allow write: if isAdmin();
+    }
+
+
+    // ─── Subjects ───────────────────────────────────────────────────────────────
+    match /subjects/{docId} {
+      allow read: if isSchoolUser();
+      allow write: if isAdmin();
+    }
+
+
+    match /timetable/{docId} {
+      allow read: if isSchoolUser();
+      allow write: if isAdmin();
+    }
+
+    match /settings/{docId} {
+      allow read: if isSchoolUser();
+      allow write: if isAdmin();
+    }
+
+    match /periodTimings/{docId} {
+      allow read: if isSchoolUser();
+      allow write: if isAdmin();
+    }
+
+
+    match /attendance/{docId} {
+      allow read: if isSchoolUser();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+
+    match /leaveRequests/{docId} {
+      allow read: if isSchoolUser();
+      allow create: if isSchoolUser();
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+
+    // ─── Exams & Results ────────────────────────────────────────────────────────
+    match /exams/{examId} {
+      allow read: if isSchoolUser();
+      allow write: if isAdmin();
+    }
+
+    match /results/{docId} {
+      allow read: if isSchoolUser();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+
+    // ─── Syllabus ───────────────────────────────────────────────────────────────
+    match /syllabus/{docId} {
+      allow read: if isSchoolUser();
+      allow write: if isAdmin();
+    }
+
+
+    // ─── Calendar Events ────────────────────────────────────────────────────────
+    match /calendarEvents/{docId} {
+      allow read: if isSchoolUser();
+      allow write: if isAdmin();
+    }
+
+
+    // ─── Holidays ───────────────────────────────────────────────────────────────
+    match /holidays/{docId} {
+      allow read: if isSchoolUser();
+      allow write: if isAdmin();
+    }
+
+
+    // ─── Fee Structures ─────────────────────────────────────────────────────────
+    match /feeStructures/{docId} {
+      allow read: if isSchoolUser();
+      allow write: if isAdmin();
+    }
+
+
+    match /feePayments/{docId} {
+      allow read: if isSchoolUser();
+      allow create: if isAdmin();
+      allow update: if isAdmin() || isSchoolUser(); // Allow simulated online payments
+      allow delete: if isAdmin();
+    }
+
+
+    // ─── Fee Discounts ───────────────────────────────────────────────────────────
+    match /feeDiscounts/{docId} {
+      allow read: if isAdmin() || isParent();
+      allow write: if isAdmin();
+    }
+
+
+    // ─── Homework ───────────────────────────────────────────────────────────────
+    match /homework/{hwId} {
+      allow read: if isSchoolUser();
+      allow create, update: if isStaff();
+      allow delete: if isStaff();
+    }
+
+
+    match /homeworkSubmissions/{docId} {
+      allow read: if isSchoolUser();
+      allow create, update: if isSchoolUser();
+      allow delete: if isAdmin();
+    }
+
+
+    // ─── Announcements ──────────────────────────────────────────────────────────
+    match /announcements/{docId} {
+      allow read: if isSchoolUser();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+
+    // ─── Notifications ──────────────────────────────────────────────────────────
+    match /notifications/{docId} {
+      // Each user reads only their own notifications
+      allow read: if isAuth() && resource.data.userId == request.auth.uid;
+      allow create: if isStaff() || isAdmin();
+      allow update: if isAuth() && resource.data.userId == request.auth.uid; // mark read
+      allow delete: if isAdmin();
+    }
+
+
+    // ─── Messages ───────────────────────────────────────────────────────────────
+    match /messages/{docId} {
+      allow read: if isAuth() && (
+        resource.data.senderId == request.auth.uid ||
+        resource.data.receiverId == request.auth.uid
+      );
+      allow create: if isSchoolUser();
+      allow update: if isAuth() && resource.data.receiverId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+
+    // ─── Audit Logs ─────────────────────────────────────────────────────────────
+    match /auditLogs/{docId} {
+      allow read: if isAdmin();
+      allow create: if isSchoolUser();
+      allow update, delete: if false; // immutable
+    }
+
+
+    // ─── Credentials Store (if used) ────────────────────────────────────────────
+    match /credentials/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+
+    // ─── Catch-all: deny everything else ────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

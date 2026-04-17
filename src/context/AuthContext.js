@@ -7,7 +7,7 @@ import {
     onAuthStateChanged,
     updatePassword as firebaseUpdatePassword,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import Cookies from 'js-cookie';
 import { ROLES } from '@/constants';
@@ -58,6 +58,20 @@ async function enrichStudentData(userData) {
     return userData;
 }
 
+// Helper: if user is a parent, fetch their children from the students collection
+async function enrichParentData(userData) {
+    if (userData.role !== ROLES.PARENT) return userData;
+    try {
+        const q = query(collection(db, 'students'), where('parentEmail', '==', userData.email));
+        const snapshot = await getDocs(q);
+        const children = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        return { ...userData, children };
+    } catch (e) {
+        console.error('Failed to fetch parent children:', e);
+    }
+    return userData;
+}
+
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -76,6 +90,7 @@ export function AuthProvider({ children }) {
                         userData = { uid: firebaseUser.uid, ...userDoc.data() };
                         userData = await enrichTeacherData(userData);
                         userData = await enrichStudentData(userData);
+                        userData = await enrichParentData(userData);
                     } else if (firebaseUser.email === 'dipakshukla158@gmail.com') {
                         // Auto-initialize the first admin user
                         userData = {
@@ -126,6 +141,7 @@ export function AuthProvider({ children }) {
                 userData = { uid: firebaseUser.uid, ...userDoc.data() };
                 userData = await enrichTeacherData(userData);
                 userData = await enrichStudentData(userData);
+                userData = await enrichParentData(userData);
             } else if (email === 'dipakshukla158@gmail.com') {
                 // Auto-initialize the first admin user
                 userData = {
@@ -206,6 +222,7 @@ export function AuthProvider({ children }) {
             case ROLES.CLASS_TEACHER:
             case ROLES.SUBJECT_TEACHER: return '/teacher';
             case ROLES.STUDENT: return '/student';
+            case ROLES.PARENT: return '/parent';
             default: return '/login';
         }
     };
@@ -222,6 +239,7 @@ export function AuthProvider({ children }) {
             isTeacher: user?.role === ROLES.CLASS_TEACHER || user?.role === ROLES.SUBJECT_TEACHER,
             isClassTeacher: user?.role === ROLES.CLASS_TEACHER,
             isStudent: user?.role === ROLES.STUDENT,
+            isParent: user?.role === ROLES.PARENT,
         }}>
             {children}
         </AuthContext.Provider>

@@ -9,6 +9,7 @@ import { auth } from '@/lib/firebase';
 import Modal from '@/components/ui/Modal';
 import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiUpload, FiDownload, FiKey, FiCopy, FiFilter, FiMail } from 'react-icons/fi';
 import { getStudents, getClasses, getSections, addStudent, updateStudent, deleteStudent, addAuditLog } from '@/lib/dataService';
+import { parseCSV, generateCSV, downloadCSVFile } from '@/lib/csvParser';
 
 export default function StudentsPage() {
     const toast = useToast();
@@ -32,7 +33,7 @@ export default function StudentsPage() {
     const [filterSection, setFilterSection] = useState('');
     const [form, setForm] = useState({
         name: '', gender: 'Male', dob: '', address: '', parentName: '',
-        parentContact: '', parentEmail: '', admissionNumber: '', rollNumber: '', class: '', section: '',
+        parentContact: '', parentEmail: '', studentEmail: '', admissionNumber: '', rollNumber: '', class: '', section: '',
     });
 
     useEffect(() => {
@@ -64,7 +65,7 @@ export default function StudentsPage() {
     });
 
     const resetForm = () => {
-        setForm({ name: '', gender: 'Male', dob: '', address: '', parentName: '', parentContact: '', parentEmail: '', admissionNumber: '', rollNumber: '', class: '', section: '' });
+        setForm({ name: '', gender: 'Male', dob: '', address: '', parentName: '', parentContact: '', parentEmail: '', studentEmail: '', admissionNumber: '', rollNumber: '', class: '', section: '' });
         setEditingStudent(null);
     };
 
@@ -82,6 +83,10 @@ export default function StudentsPage() {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (form.parentEmail && !emailRegex.test(form.parentEmail)) {
             toast.error('Please enter a valid parent email address');
+            return;
+        }
+        if (form.studentEmail && !emailRegex.test(form.studentEmail)) {
+            toast.error('Please enter a valid student email address');
             return;
         }
 
@@ -109,47 +114,74 @@ export default function StudentsPage() {
                 toast.success('Student updated');
             } else {
                 const newId = `S${String(students.length + 1).padStart(3, '0')}`;
-                const creds = createCredentials(form.name, 'student', newId);
+                
+                const studentLoginEmail = form.studentEmail || `${form.admissionNumber.toLowerCase() || newId.toLowerCase()}@school.com`;
+                const studentCreds = createCredentials(form.name, 'student', newId);
+                const parentCreds = createCredentials(form.parentName || 'Parent', 'parent', `${newId}_P`);
 
-                // Create Firebase Auth account using parent email
-                const loginEmail = form.parentEmail;
+                // Create Parent Firebase Auth Account
                 try {
-                    await createUserAccount(loginEmail, creds.tempPassword, {
-                        name: form.name,
-                        role: 'student',
-                        studentId: newId,
+                    await createUserAccount(form.parentEmail, parentCreds.tempPassword, {
+                        name: form.parentName || 'Parent',
+                        role: 'parent',
+                        childrenIds: [newId],
+                        studentId: null,
                     });
                 } catch (authError) {
                     if (authError.code === 'auth/email-already-in-use') {
-                        toast.error('This email is already registered. Use a different email.');
+                        // Parent account likely exists (sibling), which is fine, we just won't reset their password
+                        console.log("Parent account already exists, skipping creation");
+                    } else {
+                        throw authError; // For other errors
+                    }
+                }
+
+                // Create Student Firebase Auth Account
+                try {
+                    await createUserAccount(studentLoginEmail, studentCreds.tempPassword, {
+                        name: form.name,
+                        role: 'student',
+                        studentId: newId,
+                        parentEmail: form.parentEmail, // Link parent email
+                    });
+                } catch (authError) {
+                    if (authError.code === 'auth/email-already-in-use') {
+                        toast.error(`Student email ${studentLoginEmail} is already registered.`);
                         setIsSubmitting(false);
                         return;
                     }
                     throw authError;
                 }
 
-                await addStudent({ id: newId, ...studentData, loginEmail });
+                await addStudent({ id: newId, ...studentData, loginEmail: studentLoginEmail });
                 await addAuditLog('ADD_STUDENT', { studentId: newId, name: form.name });
 
-                // Send credentials email
+                // Send Dual Credentials via email to the Parent
                 try {
                     await fetch('/api/send-credentials', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            to: loginEmail,
-                            name: form.name,
-                            email: loginEmail,
-                            tempPassword: creds.tempPassword,
-                            role: 'student',
+                            to: form.parentEmail,
+                            name: form.parentName || form.name,
+                            studentName: form.name,
+                            studentEmail: studentLoginEmail,
+                            studentPassword: studentCreds.tempPassword,
+                            parentEmail: form.parentEmail,
+                            parentPassword: parentCreds.tempPassword,
+                            role: 'dual', 
                         }),
                     });
                 } catch (emailErr) {
                     console.error('Email sending failed:', emailErr);
                 }
 
-                setShowCredentials({ ...creds, email: loginEmail });
-                toast.success('Student added — account created & credentials emailed');
+                setShowCredentials({ 
+                    studentEmail: studentLoginEmail, studentPassword: studentCreds.tempPassword,
+                    parentEmail: form.parentEmail, parentPassword: parentCreds.tempPassword, 
+                    role: 'dual'
+                });
+                toast.success('Student enrolled & dual accounts created');
             }
 
             setShowModal(false);
@@ -214,79 +246,106 @@ export default function StudentsPage() {
         reader.onload = async (event) => {
             try {
                 const text = event.target.result;
-                const lines = text.split('\n').filter(l => l.trim());
-                if (lines.length < 2) {
+                const { headers, rows } = parseCSV(text);
+
+                if (rows.length === 0) {
                     toast.error('CSV file is empty or invalid');
                     setIsSubmitting(false);
                     setImportProgress('');
                     return;
                 }
 
-                const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-                const totalRows = lines.length - 1;
+                const totalRows = rows.length;
                 let successCount = 0;
                 let failCount = 0;
 
                 // Get existing students count for ID generation
                 const existingCount = students.length;
 
-                for (let i = 1; i < lines.length; i++) {
-                    const values = lines[i].split(',').map(v => v.trim());
-                    const row = {};
-                    headers.forEach((h, idx) => { row[h] = values[idx] || ''; });
+                for (let i = 0; i < rows.length; i++) {
+                    const row = rows[i];
 
                     if (!row.name) { failCount++; continue; }
 
-                    setImportProgress(`Importing ${i} of ${totalRows}...`);
+                    setImportProgress(`Importing ${i + 1} of ${totalRows}...`);
 
-                    const newId = `S${String(existingCount + i).padStart(3, '0')}`;
-                    const parentEmail = row.parentemail || row['parent email'] || '';
+                    const newId = `S${String(existingCount + i + 1).padStart(3, '0')}`;
+                    const parentEmail = row.parentemail || '';
+                    const providedStudentEmail = row.studentemail || '';
+                    
                     const studentData = {
                         id: newId,
                         name: row.name,
                         gender: row.gender || 'Male',
                         dob: row.dob || '',
                         address: row.address || '',
-                        parentName: row.parentname || row['parent name'] || '',
-                        parentContact: row.parentcontact || row['parent contact'] || '',
+                        parentName: row.parentname || '',
+                        parentContact: row.parentcontact || '',
                         parentEmail,
-                        admissionNumber: row.admissionnumber || row['admission number'] || `ADM${Date.now()}${i}`,
-                        rollNumber: parseInt(row.rollnumber || row['roll number']) || i,
+                        admissionNumber: row.admissionnumber || `ADM${Date.now()}${i}`,
+                        rollNumber: parseInt(row.rollnumber) || i + 1,
                         class: importClass,
                         section: importSection,
                     };
 
                     try {
-                        // Create auth account if email provided
+                        let studentLoginEmail = providedStudentEmail;
+                        let studentCreds = null;
+                        
                         if (parentEmail) {
-                            const creds = createCredentials(row.name, 'student', newId);
+                            studentLoginEmail = providedStudentEmail || `${studentData.admissionNumber.toLowerCase() || newId.toLowerCase()}@school.com`;
+                            studentCreds = createCredentials(row.name, 'student', newId);
+                            const parentCreds = createCredentials(row.parentname || 'Parent', 'parent', `${newId}_P`);
+                            
+                            // Try create Parent
                             try {
-                                await createUserAccount(parentEmail, creds.tempPassword, {
+                                await createUserAccount(parentEmail, parentCreds.tempPassword, {
+                                    name: row.parentname || 'Parent',
+                                    role: 'parent',
+                                    childrenIds: [newId],
+                                    studentId: null,
+                                });
+                            } catch (authErr) {
+                                if (authErr.code !== 'auth/email-already-in-use') {
+                                    console.error(`Parent account creation failed for ${parentEmail}:`, authErr);
+                                }
+                            }
+
+                            // Try create Student
+                            try {
+                                await createUserAccount(studentLoginEmail, studentCreds.tempPassword, {
                                     name: row.name,
                                     role: 'student',
                                     studentId: newId,
+                                    parentEmail: parentEmail,
                                 });
-                                studentData.loginEmail = parentEmail;
+                                studentData.loginEmail = studentLoginEmail;
+                                
+                                // Send Dual Credentials
                                 fetch('/api/send-credentials', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({
                                         to: parentEmail,
-                                        name: row.name,
-                                        email: parentEmail,
-                                        tempPassword: creds.tempPassword,
-                                        role: 'student',
+                                        name: row.parentname || row.name,
+                                        studentName: row.name,
+                                        studentEmail: studentLoginEmail,
+                                        studentPassword: studentCreds.tempPassword,
+                                        parentEmail: parentEmail,
+                                        parentPassword: parentCreds.tempPassword,
+                                        role: 'dual',
                                     }),
                                 }).catch(() => {});
                             } catch (authErr) {
-                                console.error(`Account creation failed for ${parentEmail}:`, authErr);
+                                console.error(`Student account creation failed for ${studentLoginEmail}:`, authErr);
+                                // Fallback: if student email fails, we might still save the student record but without login
                             }
                         }
 
                         await addStudent(studentData);
                         successCount++;
                     } catch (err) {
-                        console.error(`Failed to import row ${i}:`, err);
+                        console.error(`Failed to import row ${i + 1}:`, err);
                         failCount++;
                     }
                 }
@@ -312,12 +371,14 @@ export default function StudentsPage() {
     };
 
     const downloadCSVTemplate = () => {
-        const csv = 'Name,Gender,DOB,Address,ParentName,ParentContact,ParentEmail,AdmissionNumber,RollNumber\nJohn Doe,Male,2014-05-12,123 Main St,Mr. Doe,9800000001,parent@email.com,ADM2024100,1\nJane Smith,Female,2014-08-20,456 Oak Ave,Mrs. Smith,9800000002,jane.parent@email.com,ADM2024101,2\n';
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = 'student_import_template.csv'; a.click();
-        URL.revokeObjectURL(url);
+        const csv = generateCSV(
+            ['Name', 'Gender', 'DOB', 'Address', 'ParentName', 'ParentContact', 'ParentEmail', 'StudentEmail', 'AdmissionNumber', 'RollNumber'],
+            [
+                ['John Doe', 'Male', '2014-05-12', '123 Main St, Apt 4', 'Mr. Doe', '9800000001', 'parent@email.com', '', 'ADM2024100', '1'],
+                ['Jane Smith', 'Female', '2014-08-20', '456 Oak Ave', 'Mrs. Smith', '9800000002', 'jane.parent@email.com', 'student@email.com', 'ADM2024101', '2'],
+            ]
+        );
+        downloadCSVFile(csv, 'student_import_template.csv');
         toast.success('Template downloaded');
     };
 
@@ -326,16 +387,15 @@ export default function StudentsPage() {
         const classLabel = filterClass ? (classes.find(c => c.id === filterClass)?.name || filterClass) : 'All_Classes';
         const sectionLabel = filterSection || 'All_Sections';
 
-        let csv = 'Sr No,Admission No,Name,Gender,DOB,Class,Section,Roll No,Parent Name,Parent Contact,Parent Email,Address\n';
-        filtered.forEach((s, idx) => {
-            csv += `${idx + 1},${s.admissionNumber || ''},"${s.name || ''}",${s.gender || ''},${s.dob || ''},"${getClassName(s.class)}",${s.section || ''},${s.rollNumber || ''},"${s.parentName || ''}",${s.parentContact || ''},${s.parentEmail || ''},"${(s.address || '').replace(/"/g, '""')}"\n`;
-        });
+        const headers = ['Sr No', 'Admission No', 'Name', 'Gender', 'DOB', 'Class', 'Section', 'Roll No', 'Parent Name', 'Parent Contact', 'Parent Email', 'Student Email', 'Address'];
+        const rows = filtered.map((s, idx) => [
+            idx + 1, s.admissionNumber || '', s.name || '', s.gender || '', s.dob || '',
+            getClassName(s.class), s.section || '', s.rollNumber || '',
+            s.parentName || '', s.parentContact || '', s.parentEmail || '', s.loginEmail || '', s.address || '',
+        ]);
 
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = `students_${classLabel}_${sectionLabel}.csv`; a.click();
-        URL.revokeObjectURL(url);
+        const csv = generateCSV(headers, rows);
+        downloadCSVFile(csv, `students_${classLabel}_${sectionLabel}.csv`);
         toast.success(`Downloaded ${filtered.length} student records`);
     };
 
@@ -448,9 +508,10 @@ export default function StudentsPage() {
                     <div className="input-group"><label className="input-label">Parent Name</label><input className="input" placeholder="Mr. S.K. Verma" value={form.parentName} onChange={e => setForm({ ...form, parentName: e.target.value })} /></div>
                     <div className="input-group"><label className="input-label">Parent Contact</label><input className="input" placeholder="9800000001" value={form.parentContact} onChange={e => setForm({ ...form, parentContact: e.target.value })} /></div>
                     <div className="input-group"><label className="input-label">Parent Email {!editingStudent && '*'}</label><input className="input" type="email" placeholder="parent@email.com" value={form.parentEmail} onChange={e => setForm({ ...form, parentEmail: e.target.value })} /></div>
+                    <div className="input-group"><label className="input-label">Student Email (Optional)</label><input className="input" type="email" placeholder="student@email.com (auto-generated if empty)" value={form.studentEmail} onChange={e => setForm({ ...form, studentEmail: e.target.value })} /></div>
                     <div className="input-group grid-form-full"><label className="input-label">Address</label><textarea className="input" placeholder="Full address" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} /></div>
                 </div>
-                {!editingStudent && <div style={{ marginTop: '1rem', padding: '0.75rem', borderRadius: '0.5rem', background: 'var(--color-info-bg)', fontSize: '0.8125rem', color: '#2563eb' }}>💡 A login account will be created using the parent email. Credentials will be emailed automatically.</div>}
+                {!editingStudent && <div style={{ marginTop: '1rem', padding: '0.75rem', borderRadius: '0.5rem', background: 'var(--color-info-bg)', fontSize: '0.8125rem', color: '#2563eb' }}>💡 Separate Student and Parent accounts will be created. Credentials will be automatically emailed to the parent.</div>}
             </Modal>
 
             {/* Import CSV Modal */}
