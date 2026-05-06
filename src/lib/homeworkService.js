@@ -4,19 +4,17 @@ import { collection, doc, getDocs, setDoc, updateDoc, deleteDoc, query, where, o
 // --- Homework ---
 
 export const getHomework = async (filters = {}) => {
-    let q = collection(db, 'homework');
-    const constraints = [];
-    if (filters.classId) constraints.push(where('classId', '==', filters.classId));
-    if (filters.sectionId) constraints.push(where('sectionId', '==', filters.sectionId));
-    if (filters.teacherId) constraints.push(where('teacherId', '==', filters.teacherId));
-
-    if (constraints.length > 0) {
-        q = query(q, ...constraints);
-    } else {
-        q = query(q, orderBy('createdAt', 'desc'));
-    }
+    // Fetch all homework and filter client-side to avoid composite index requirements
+    const q = query(collection(db, 'homework'), orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    let results = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Apply filters client-side
+    if (filters.classId) results = results.filter(h => h.classId === filters.classId);
+    if (filters.sectionId) results = results.filter(h => h.sectionId === filters.sectionId);
+    if (filters.teacherId) results = results.filter(h => h.teacherId === filters.teacherId);
+
+    return results;
 };
 
 export const addHomework = async (data) => {

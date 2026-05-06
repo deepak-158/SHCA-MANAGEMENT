@@ -58,20 +58,50 @@ export default function StudentsPage() {
 
     const filtered = students.filter(s => {
         const matchSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            s.admissionNumber.toLowerCase().includes(searchQuery.toLowerCase());
+            (s.admissionNumber || '').toLowerCase().includes(searchQuery.toLowerCase());
         const matchClass = !filterClass || s.class === filterClass;
         const matchSection = !filterSection || s.section === filterSection;
         return matchSearch && matchClass && matchSection;
     });
+
+    // Auto-generate admission number: ADM-YYYY-XXXX
+    const generateAdmissionNumber = () => {
+        const year = new Date().getFullYear();
+        const existing = students
+            .map(s => s.admissionNumber || '')
+            .filter(a => a.startsWith(`ADM-${year}-`))
+            .map(a => parseInt(a.split('-')[2]) || 0);
+        const nextNum = (existing.length > 0 ? Math.max(...existing) : 0) + 1;
+        return `ADM-${year}-${String(nextNum).padStart(4, '0')}`;
+    };
+
+    // Auto-compute roll number: next available in the class/section (max + 1)
+    const computeRollNumber = (classId, section) => {
+        if (!classId || !section) return 1;
+        const classmates = students
+            .filter(s => s.class === classId && s.section === section);
+        if (classmates.length === 0) return 1;
+        const maxRoll = Math.max(...classmates.map(s => parseInt(s.rollNumber) || 0));
+        return maxRoll + 1;
+    };
 
     const resetForm = () => {
         setForm({ name: '', gender: 'Male', dob: '', address: '', parentName: '', parentContact: '', parentEmail: '', studentEmail: '', admissionNumber: '', rollNumber: '', class: '', section: '' });
         setEditingStudent(null);
     };
 
+    // Recompute roll number when name, class, or section changes (for new students)
+    const handleFormChange = (updates) => {
+        const newForm = { ...form, ...updates };
+        if (!editingStudent && newForm.class && newForm.section) {
+            newForm.rollNumber = computeRollNumber(newForm.class, newForm.section);
+        }
+        setForm(newForm);
+    };
+
     const handleSave = async () => {
-        if (!form.name || !form.class || !form.section || !form.admissionNumber) {
-            toast.error('Please fill all required fields');
+        if (!form.name || !form.class || !form.section) {
+            toast.error('Please fill all required fields (Name, Class, Section)');
             return;
         }
 
@@ -103,9 +133,12 @@ export default function StudentsPage() {
 
         setIsSubmitting(true);
         try {
+            const admNum = form.admissionNumber || generateAdmissionNumber();
+            const rollNum = form.rollNumber || computeRollNumber(form.class, form.section);
             const studentData = {
                 ...form,
-                rollNumber: parseInt(form.rollNumber) || students.length + 1
+                admissionNumber: admNum,
+                rollNumber: parseInt(rollNum) || 1,
             };
 
             if (editingStudent) {
@@ -160,7 +193,7 @@ export default function StudentsPage() {
                 try {
                     await fetch('/api/send-credentials', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json', 'x-api-secret': process.env.NEXT_PUBLIC_API_SECRET },
                         body: JSON.stringify({
                             to: form.parentEmail,
                             name: form.parentName || form.name,
@@ -324,7 +357,7 @@ export default function StudentsPage() {
                                 // Send Dual Credentials
                                 fetch('/api/send-credentials', {
                                     method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
+                                    headers: { 'Content-Type': 'application/json', 'x-api-secret': process.env.NEXT_PUBLIC_API_SECRET },
                                     body: JSON.stringify({
                                         to: parentEmail,
                                         name: row.parentname || row.name,
@@ -419,7 +452,7 @@ export default function StudentsPage() {
                     <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
                         <FiUpload /> Import CSV
                     </button>
-                    <button className="btn btn-primary" onClick={() => { resetForm(); setShowModal(true); }}>
+                    <button className="btn btn-primary" onClick={() => { resetForm(); setForm(prev => ({ ...prev, admissionNumber: generateAdmissionNumber() })); setShowModal(true); }}>
                         <FiPlus /> Add Student
                     </button>
                 </div>
@@ -498,13 +531,19 @@ export default function StudentsPage() {
             <Modal isOpen={showModal} onClose={() => { setShowModal(false); resetForm(); }} title={editingStudent ? 'Edit Student' : 'Add New Student'} size="lg"
                 footer={<><button className="btn btn-secondary" onClick={() => { setShowModal(false); resetForm(); }}>Cancel</button><button className="btn btn-primary" onClick={handleSave}>{editingStudent ? 'Update' : 'Add Student'}</button></>}>
                 <div className="grid-form">
-                    <div className="input-group"><label className="input-label">Full Name *</label><input className="input" placeholder="e.g. Rahul Verma" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
+                    <div className="input-group"><label className="input-label">Full Name *</label><input className="input" placeholder="e.g. Rahul Verma" value={form.name} onChange={e => handleFormChange({ name: e.target.value })} /></div>
                     <div className="input-group"><label className="input-label">Gender</label><select className="input" value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value })}><option>Male</option><option>Female</option><option>Other</option></select></div>
                     <div className="input-group"><label className="input-label">Date of Birth</label><input className="input" type="date" value={form.dob} onChange={e => setForm({ ...form, dob: e.target.value })} /></div>
-                    <div className="input-group"><label className="input-label">Admission Number *</label><input className="input" placeholder="ADM2024001" value={form.admissionNumber} onChange={e => setForm({ ...form, admissionNumber: e.target.value })} /></div>
-                    <div className="input-group"><label className="input-label">Class *</label><select className="input" value={form.class} onChange={e => setForm({ ...form, class: e.target.value })}><option value="">Select Class</option>{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                    <div className="input-group"><label className="input-label">Section *</label><select className="input" value={form.section} onChange={e => setForm({ ...form, section: e.target.value })}><option value="">Select</option>{sections.filter(s => s.classId === form.class).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}</select></div>
-                    <div className="input-group"><label className="input-label">Roll Number</label><input className="input" type="number" value={form.rollNumber} onChange={e => setForm({ ...form, rollNumber: e.target.value })} /></div>
+                    <div className="input-group">
+                        <label className="input-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>Admission Number {!editingStudent && <span className="badge badge-info" style={{ fontSize: '0.625rem', padding: '0.125rem 0.375rem' }}>Auto</span>}</label>
+                        <input className="input" value={form.admissionNumber} onChange={e => setForm({ ...form, admissionNumber: e.target.value })} readOnly={!editingStudent} style={!editingStudent ? { background: 'var(--color-bg)', cursor: 'default' } : {}} />
+                    </div>
+                    <div className="input-group"><label className="input-label">Class *</label><select className="input" value={form.class} onChange={e => handleFormChange({ class: e.target.value, section: '' })}><option value="">Select Class</option>{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                    <div className="input-group"><label className="input-label">Section *</label><select className="input" value={form.section} onChange={e => handleFormChange({ section: e.target.value })}><option value="">Select</option>{sections.filter(s => s.classId === form.class).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}</select></div>
+                    <div className="input-group">
+                        <label className="input-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>Roll Number {!editingStudent && <span className="badge badge-info" style={{ fontSize: '0.625rem', padding: '0.125rem 0.375rem' }}>Auto</span>}</label>
+                        <input className="input" type="number" value={form.rollNumber} onChange={e => setForm({ ...form, rollNumber: e.target.value })} readOnly={!editingStudent} style={!editingStudent ? { background: 'var(--color-bg)', cursor: 'default' } : {}} />
+                    </div>
                     <div className="input-group"><label className="input-label">Parent Name</label><input className="input" placeholder="Mr. S.K. Verma" value={form.parentName} onChange={e => setForm({ ...form, parentName: e.target.value })} /></div>
                     <div className="input-group"><label className="input-label">Parent Contact</label><input className="input" placeholder="9800000001" value={form.parentContact} onChange={e => setForm({ ...form, parentContact: e.target.value })} /></div>
                     <div className="input-group"><label className="input-label">Parent Email {!editingStudent && '*'}</label><input className="input" type="email" placeholder="parent@email.com" value={form.parentEmail} onChange={e => setForm({ ...form, parentEmail: e.target.value })} /></div>
@@ -562,18 +601,31 @@ export default function StudentsPage() {
             </Modal>
 
             {/* Credentials Modal */}
-            <Modal isOpen={!!showCredentials} onClose={() => setShowCredentials(null)} title="🔑 Login Credentials"
+            <Modal isOpen={!!showCredentials} onClose={() => setShowCredentials(null)} title="🔑 Login Credentials Created"
                 footer={<button className="btn btn-primary" onClick={() => setShowCredentials(null)}>Done</button>}>
                 {showCredentials && (
-                    <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'var(--color-success-bg)', border: '1px solid #a7f3d0' }}>
-                        <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#059669', marginBottom: '0.75rem' }}>Credentials generated:</div>
-                        {[{ label: 'Username', value: showCredentials.username }, { label: 'Email', value: showCredentials.email }, { label: 'Temp Password', value: showCredentials.tempPassword }].map(item => (
-                            <div key={item.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
-                                <span><span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>{item.label}: </span><span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{item.value}</span></span>
-                                <button className="btn btn-ghost btn-icon btn-sm" onClick={() => copyToClipboard(item.value)}><FiCopy /></button>
-                            </div>
-                        ))}
-                        <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>⚠️ Password change required on first login.</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        {/* Student Credentials */}
+                        <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'var(--color-success-bg)', border: '1px solid #a7f3d0' }}>
+                            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#059669', marginBottom: '0.75rem' }}>🎒 Student Login Credentials</div>
+                            {[{ label: 'Email', value: showCredentials.studentEmail }, { label: 'Temp Password', value: showCredentials.studentPassword }].map(item => (
+                                <div key={item.label + '-student'} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
+                                    <span><span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>{item.label}: </span><span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{item.value}</span></span>
+                                    <button className="btn btn-ghost btn-icon btn-sm" onClick={() => copyToClipboard(item.value)}><FiCopy /></button>
+                                </div>
+                            ))}
+                        </div>
+                        {/* Parent Credentials */}
+                        <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'var(--color-info-bg)', border: '1px solid #93c5fd' }}>
+                            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#2563eb', marginBottom: '0.75rem' }}>👨‍👩‍👧 Parent Login Credentials</div>
+                            {[{ label: 'Email', value: showCredentials.parentEmail }, { label: 'Temp Password', value: showCredentials.parentPassword }].map(item => (
+                                <div key={item.label + '-parent'} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
+                                    <span><span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>{item.label}: </span><span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{item.value}</span></span>
+                                    <button className="btn btn-ghost btn-icon btn-sm" onClick={() => copyToClipboard(item.value)}><FiCopy /></button>
+                                </div>
+                            ))}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>⚠️ Both accounts require password change on first login. Credentials have also been emailed to the parent.</div>
                     </div>
                 )}
             </Modal>

@@ -1,8 +1,42 @@
 import nodemailer from 'nodemailer';
 import { NextResponse } from 'next/server';
 
+// Simple in-memory rate limiter (resets on server restart)
+const rateLimitMap = new Map();
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX = 10; // max 10 emails per minute
+
+function isRateLimited(ip) {
+    const now = Date.now();
+    const entry = rateLimitMap.get(ip);
+    if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW) {
+        rateLimitMap.set(ip, { windowStart: now, count: 1 });
+        return false;
+    }
+    entry.count++;
+    return entry.count > RATE_LIMIT_MAX;
+}
+
 export async function POST(request) {
     try {
+        // --- Authentication: verify the shared API secret ---
+        const authHeader = request.headers.get('x-api-secret');
+        const apiSecret = process.env.API_SECRET;
+
+        if (!apiSecret) {
+            return NextResponse.json({ error: 'Server misconfigured: API_SECRET not set' }, { status: 500 });
+        }
+
+        if (authHeader !== apiSecret) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // --- Rate limiting ---
+        const ip = request.headers.get('x-forwarded-for') || 'unknown';
+        if (isRateLimited(ip)) {
+            return NextResponse.json({ error: 'Too many requests. Try again later.' }, { status: 429 });
+        }
+
         const { to, name, email, tempPassword, role, studentName, studentEmail, studentPassword, parentEmail, parentPassword } = await request.json();
 
         if (!to) {

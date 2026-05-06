@@ -24,18 +24,26 @@ export default function StudentHomeworkPage() {
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
-        const fetch = async () => {
+        const fetchHW = async () => {
             try {
-                const [hw, subs, subjs] = await Promise.all([
-                    getHomework({ classId: user?.class, sectionId: user?.section }),
+                // Fetch all homework and filter client-side for reliability
+                const [allHW, subs, subjs] = await Promise.all([
+                    getHomework({}),
                     getStudentSubmissions(user?.studentId),
                     getSubjects(),
                 ]);
-                setHomework(hw); setSubmissions(subs); setSubjects(subjs);
-            } catch (e) { console.error(e); }
+                // Filter homework for this student's class and section
+                const myHW = allHW.filter(h => 
+                    h.classId === user?.class && h.sectionId === user?.section
+                );
+                setHomework(myHW); setSubmissions(subs); setSubjects(subjs);
+            } catch (e) { 
+                console.error('Failed to load homework:', e);
+                toast.error('Failed to load homework');
+            }
             finally { setLoading(false); }
         };
-        if (user?.class) fetch();
+        if (user?.class) fetchHW();
     }, [user]);
 
     const getSubmission = (hwId) => submissions.find(s => s.homeworkId === hwId);
@@ -48,7 +56,10 @@ export default function StudentHomeworkPage() {
             const url = await uploadFile(file);
             setSubmitFiles(prev => [...prev, { name: file.name, url }]);
             toast.success('File attached');
-        } catch (err) { toast.error('Upload failed'); }
+        } catch (err) { 
+            console.error('Upload failed:', err);
+            toast.error('Upload failed: ' + (err.message || 'Unknown error'));
+        }
         e.target.value = '';
     };
 
@@ -151,11 +162,17 @@ export default function StudentHomeworkPage() {
                     </div>
                     <div className="input-group">
                         <label className="input-label">Upload your work</label>
-                        <input type="file" ref={fileRef} onChange={handleFileUpload} style={{ fontSize: '0.875rem' }} />
+                        <input type="file" ref={fileRef} onChange={handleFileUpload} style={{ display: 'none' }} />
+                        <button type="button" className="btn btn-secondary" onClick={() => fileRef.current?.click()} style={{ alignSelf: 'flex-start' }}>
+                            <FiUpload /> Choose File
+                        </button>
                         {submitFiles.length > 0 && (
                             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
                                 {submitFiles.map((f, i) => (
-                                    <span key={i} className="badge badge-success"><FiPaperclip /> {f.name}</span>
+                                    <span key={i} className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                        <FiPaperclip /> {f.name}
+                                        <button type="button" onClick={(e) => { e.stopPropagation(); setSubmitFiles(prev => prev.filter((_, idx) => idx !== i)); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, marginLeft: '0.25rem', fontSize: '0.875rem', lineHeight: 1 }} title="Remove">×</button>
+                                    </span>
                                 ))}
                             </div>
                         )}

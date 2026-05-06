@@ -223,7 +223,7 @@ export default function TeachersPage() {
                 try {
                     await fetch('/api/send-credentials', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json', 'x-api-secret': process.env.NEXT_PUBLIC_API_SECRET },
                         body: JSON.stringify({
                             to: form.email,
                             name: form.name,

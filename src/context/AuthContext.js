@@ -91,16 +91,6 @@ export function AuthProvider({ children }) {
                         userData = await enrichTeacherData(userData);
                         userData = await enrichStudentData(userData);
                         userData = await enrichParentData(userData);
-                    } else if (firebaseUser.email === 'dipakshukla158@gmail.com') {
-                        // Auto-initialize the first admin user
-                        userData = {
-                            uid: firebaseUser.uid,
-                            name: 'System Admin',
-                            email: firebaseUser.email,
-                            role: ROLES.ADMIN,
-                            createdAt: new Date().toISOString()
-                        };
-                        await setDoc(userDocRef, userData);
                     }
 
                     if (userData) {
@@ -142,16 +132,6 @@ export function AuthProvider({ children }) {
                 userData = await enrichTeacherData(userData);
                 userData = await enrichStudentData(userData);
                 userData = await enrichParentData(userData);
-            } else if (email === 'dipakshukla158@gmail.com') {
-                // Auto-initialize the first admin user
-                userData = {
-                    uid: firebaseUser.uid,
-                    name: 'System Admin',
-                    email: firebaseUser.email,
-                    role: ROLES.ADMIN,
-                    createdAt: new Date().toISOString()
-                };
-                await setDoc(userDocRef, userData);
             }
 
             if (!userData) {

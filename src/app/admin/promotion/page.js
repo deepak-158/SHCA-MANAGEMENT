@@ -42,7 +42,11 @@ export default function PromotionPage() {
     };
 
     const currentClass = classes.find(c => c.id === selectedClass);
-    const defaultNextClass = classes.find(c => c.order === (currentClass?.order || 0) + 1);
+    const currentOrder = currentClass?.order ?? -1;
+    // Find the next class by smallest order greater than current (handles gaps in order values)
+    const defaultNextClass = classes
+        .filter(c => c.order > currentOrder)
+        .sort((a, b) => a.order - b.order)[0] || null;
 
     // Auto-set target class when source class changes
     useEffect(() => {

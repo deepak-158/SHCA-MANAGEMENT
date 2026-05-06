@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/ui/Toast';
 import Modal from '@/components/ui/Modal';
@@ -25,6 +25,7 @@ export default function TeacherHomeworkPage() {
     const [students, setStudents] = useState([]);
     const [selectedHW, setSelectedHW] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const fileInputRef = useRef(null);
 
     const [form, setForm] = useState({
         title: '', description: '', classId: '', sectionId: '', subjectId: '',
@@ -41,22 +42,17 @@ export default function TeacherHomeworkPage() {
             const [cls, sec, subs, stu] = await Promise.all([getClasses(), getSections(), getSubjects(), getStudents()]);
             setClasses(cls); setSections(sec); setSubjects(subs); setStudents(stu);
 
-            // Fetch homework for teacher's assigned classes
-            const assignedClasses = user?.assignedClasses || [];
-            const classTeacherOf = user?.classTeacherOf;
-            let allHW = [];
-
-            if (assignedClasses.length > 0 || classTeacherOf) {
-                // Fetch all homework and filter
-                const hw = await getHomework({ teacherId: user?.teacherId });
-                allHW = hw;
-            }
-            // Fallback: fetch all if teacher has no assignments tracked
-            if (allHW.length === 0) {
-                const hw = await getHomework({});
-                allHW = hw.filter(h => h.teacherId === user?.teacherId);
-            }
-            setHomework(allHW);
+            // Fetch all homework and filter to this teacher's assignments
+            const allHW = await getHomework({});
+            const teacherId = user?.teacherId;
+            const teacherName = user?.name;
+            
+            // Match by teacherId or fallback to teacher name
+            const myHW = allHW.filter(h => 
+                (teacherId && h.teacherId === teacherId) || 
+                (!teacherId && teacherName && h.teacherName === teacherName)
+            );
+            setHomework(myHW);
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
     };
@@ -128,7 +124,10 @@ export default function TeacherHomeworkPage() {
             const url = await uploadFile(file);
             setForm(prev => ({ ...prev, attachments: [...prev.attachments, { name: file.name, url }] }));
             toast.success('File attached');
-        } catch (err) { toast.error('Upload failed'); }
+        } catch (err) { 
+            console.error('Upload failed:', err);
+            toast.error('Upload failed: ' + (err.message || 'Unknown error'));
+        }
         e.target.value = '';
     };
 
@@ -202,11 +201,17 @@ export default function TeacherHomeworkPage() {
                     <div className="input-group"><label className="input-label">Due Date *</label><input className="input" type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} /></div>
                     <div className="input-group grid-form-full">
                         <label className="input-label">Attachments</label>
-                        <input type="file" onChange={handleFileUpload} style={{ fontSize: '0.875rem' }} />
+                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{ display: 'none' }} />
+                        <button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} style={{ alignSelf: 'flex-start' }}>
+                            <FiPaperclip /> Choose File
+                        </button>
                         {form.attachments?.length > 0 && (
                             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
                                 {form.attachments.map((att, i) => (
-                                    <span key={i} className="badge badge-info"><FiPaperclip /> {att.name}</span>
+                                    <span key={i} className="badge badge-info" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                        <FiPaperclip /> {att.name}
+                                        <button type="button" onClick={(e) => { e.stopPropagation(); setForm(prev => ({ ...prev, attachments: prev.attachments.filter((_, idx) => idx !== i) })); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, marginLeft: '0.25rem', fontSize: '0.875rem', lineHeight: 1 }} title="Remove">×</button>
+                                    </span>
                                 ))}
                             </div>
                         )}
