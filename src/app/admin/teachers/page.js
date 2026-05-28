@@ -221,9 +221,10 @@ export default function TeachersPage() {
 
                 // Send credentials email
                 try {
+                    const idToken = await auth.currentUser?.getIdToken();
                     await fetch('/api/send-credentials', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'x-api-secret': process.env.NEXT_PUBLIC_API_SECRET },
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
                         body: JSON.stringify({
                             to: form.email,
                             name: form.name,

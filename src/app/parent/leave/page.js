@@ -7,7 +7,7 @@ import { getChildrenByParentEmail, getChildLeaves } from '@/lib/parentService';
 import { getClasses, submitLeaveRequest } from '@/lib/dataService';
 import Modal from '@/components/ui/Modal';
 import { FiPlus, FiClipboard } from 'react-icons/fi';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatDateInput } from '@/lib/utils';
 
 export default function ParentLeavePage() {
     const { user } = useAuth();
@@ -140,11 +140,11 @@ export default function ParentLeavePage() {
                     <div className="grid-form">
                         <div className="input-group">
                             <label className="input-label">From Date *</label>
-                            <input className="input" type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} />
+                            <input className="input" type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} min={formatDateInput(new Date())} />
                         </div>
                         <div className="input-group">
                             <label className="input-label">To Date *</label>
-                            <input className="input" type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} />
+                            <input className="input" type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} min={form.startDate || formatDateInput(new Date())} />
                         </div>
                     </div>
                 </div>

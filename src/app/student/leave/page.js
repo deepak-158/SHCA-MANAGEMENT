@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/ui/Toast';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatDateInput } from '@/lib/utils';
 import { FiSend } from 'react-icons/fi';
 import { getLeaveRequests, submitLeaveRequest } from '@/lib/dataService';
 
@@ -80,11 +80,11 @@ export default function StudentLeavePage() {
                         <div style={{ display: 'flex', gap: '1rem' }}>
                             <div className="input-group" style={{ flex: 1 }}>
                                 <label className="input-label">From Date *</label>
-                                <input className="input" type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} min={new Date().toISOString().split('T')[0]} disabled={isSubmitting} />
+                                <input className="input" type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} min={formatDateInput(new Date())} disabled={isSubmitting} />
                             </div>
                             <div className="input-group" style={{ flex: 1 }}>
                                 <label className="input-label">To Date *</label>
-                                <input className="input" type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} min={form.startDate || new Date().toISOString().split('T')[0]} disabled={isSubmitting} />
+                                <input className="input" type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} min={form.startDate || formatDateInput(new Date())} disabled={isSubmitting} />
                             </div>
                         </div>
                         <button type="submit" className="btn btn-primary" disabled={isSubmitting}>

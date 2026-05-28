@@ -1,19 +1,29 @@
 'use client';
 
-import { useState, useCallback, createContext, useContext } from 'react';
+import { useState, useCallback, createContext, useContext, useRef, useEffect } from 'react';
 import { FiCheck, FiX, FiInfo, FiAlertTriangle } from 'react-icons/fi';
 
 const ToastContext = createContext({});
 
 export function ToastProvider({ children }) {
     const [toasts, setToasts] = useState([]);
+    const timeoutsRef = useRef(new Set());
+
+    useEffect(() => {
+        const timeouts = timeoutsRef.current;
+        return () => {
+            timeouts.forEach(clearTimeout);
+        };
+    }, []);
 
     const addToast = useCallback((message, type = 'success', duration = 3000) => {
-        const id = Date.now();
+        const id = `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
         setToasts((prev) => [...prev, { id, message, type }]);
-        setTimeout(() => {
+        const timeoutId = setTimeout(() => {
             setToasts((prev) => prev.filter((t) => t.id !== id));
+            timeoutsRef.current.delete(timeoutId);
         }, duration);
+        timeoutsRef.current.add(timeoutId);
     }, []);
 
     const toast = {

@@ -113,7 +113,7 @@ export default function Header({ onMenuToggle, title }) {
     return (
         <header className="header">
             <div className="header-left">
-                <button className="menu-toggle" onClick={onMenuToggle}>
+                <button className="menu-toggle" onClick={onMenuToggle} aria-label="Toggle navigation menu">
                     <FiMenu />
                 </button>
                 <div>
@@ -126,6 +126,8 @@ export default function Header({ onMenuToggle, title }) {
                     <button
                         className="btn btn-ghost btn-icon"
                         title="Notifications"
+                        aria-label="View notifications"
+                        aria-expanded={showNotifications}
                         style={{ position: 'relative' }}
                         onClick={() => { setShowNotifications(!showNotifications); if (!showNotifications) fetchNotifications(); }}
                     >
@@ -155,7 +157,7 @@ export default function Header({ onMenuToggle, title }) {
                                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                             }}>
                                 <span style={{ fontWeight: 700, fontSize: '0.9375rem' }}>Notifications</span>
-                                <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setShowNotifications(false)}><FiX /></button>
+                                <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setShowNotifications(false)} aria-label="Close notifications"><FiX /></button>
                             </div>
 
                             {loading ? (

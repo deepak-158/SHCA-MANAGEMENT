@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/Toast';
 import { calculateGrade, calculatePercentage } from '@/lib/utils';
 import { FiEye, FiEyeOff, FiCheckCircle, FiClock } from 'react-icons/fi';
 import { getClasses, getSections, getSubjects, getStudents, getExams, updateExam, getResults } from '@/lib/dataService';
+import { sendBulkNotifications } from '@/lib/communicationService';
 
 export default function ResultsPage() {
     const toast = useToast();
@@ -50,6 +51,23 @@ export default function ResultsPage() {
         setToggling(exam.id);
         try {
             await updateExam(exam.id, { resultReleased: newReleased });
+            
+            // Dispatch bulk alerts to students with grades if releasing
+            if (newReleased) {
+                const uniqueStudentIds = [...new Set(results.filter(r => r.examId === exam.id).map(r => r.studentId))];
+                if (uniqueStudentIds.length > 0) {
+                    try {
+                        await sendBulkNotifications(uniqueStudentIds, {
+                            title: `Results Released: ${exam.name}`,
+                            message: `The results for ${exam.name} are now available to view.`,
+                            type: 'result_published'
+                        });
+                    } catch (notifErr) {
+                        console.error("Failed to write bulk results notifications:", notifErr);
+                    }
+                }
+            }
+
             setExams(prev => prev.map(e => e.id === exam.id ? { ...e, resultReleased: newReleased } : e));
             toast.success(newReleased ? `Results released for ${exam.name}` : `Results hidden for ${exam.name}`);
         } catch (error) {

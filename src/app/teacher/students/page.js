@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/ui/Toast';
 import { FiUsers, FiDownload, FiSearch, FiFilter } from 'react-icons/fi';
@@ -87,21 +87,23 @@ export default function TeacherStudentsPage() {
     };
 
     // Build unique class list from available class+section pairs
-    const availableClasses = (() => {
+    const availableClasses = useMemo(() => {
         const ids = [...new Set(availableClassSections.map(cs => cs.class))];
         return classes.filter(c => ids.includes(c.id));
-    })();
+    }, [availableClassSections, classes]);
 
     // Filter sections for the selected class, only those in availableClassSections
-    const filteredSections = (() => {
+    const filteredSections = useMemo(() => {
         const allowed = availableClassSections.filter(cs => cs.class === selectedClass).map(cs => cs.section);
         return sections.filter(s => s.classId === selectedClass && allowed.includes(s.name));
-    })();
+    }, [availableClassSections, selectedClass, sections]);
 
-    const students = allStudents
-        .filter(s => s.class === selectedClass && (!selectedSection || s.section === selectedSection))
-        .filter(s => !searchQuery || s.name?.toLowerCase().includes(searchQuery.toLowerCase()) || s.rollNumber?.toString().includes(searchQuery))
-        .sort((a, b) => (a.rollNumber || 0) - (b.rollNumber || 0));
+    const students = useMemo(() => {
+        return allStudents
+            .filter(s => s.class === selectedClass && (!selectedSection || s.section === selectedSection))
+            .filter(s => !searchQuery || s.name?.toLowerCase().includes(searchQuery.toLowerCase()) || s.rollNumber?.toString().includes(searchQuery))
+            .sort((a, b) => (a.rollNumber || 0) - (b.rollNumber || 0));
+    }, [allStudents, selectedClass, selectedSection, searchQuery]);
 
     const getClassName = (classId) => {
         const cls = classes.find(c => c.id === classId);

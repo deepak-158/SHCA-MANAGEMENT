@@ -5,7 +5,8 @@ import { useToast } from '@/components/ui/Toast';
 import { createCredentials } from '@/lib/credentials';
 import { createUserAccount } from '@/lib/accountService';
 import { sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { query, collection, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 import Modal from '@/components/ui/Modal';
 import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiUpload, FiDownload, FiKey, FiCopy, FiFilter, FiMail } from 'react-icons/fi';
 import { getStudents, getClasses, getSections, addStudent, updateStudent, deleteStudent, addAuditLog } from '@/lib/dataService';
@@ -162,8 +163,24 @@ export default function StudentsPage() {
                     });
                 } catch (authError) {
                     if (authError.code === 'auth/email-already-in-use') {
-                        // Parent account likely exists (sibling), which is fine, we just won't reset their password
-                        console.log("Parent account already exists, skipping creation");
+                        // Parent account already exists (sibling). We must append the new child ID to the parent's childrenIds array
+                        console.log("Parent account already exists, appending child ID");
+                        try {
+                            const q = query(collection(db, 'users'), where('email', '==', form.parentEmail));
+                            const parentSnapshot = await getDocs(q);
+                            if (!parentSnapshot.empty) {
+                                const parentDoc = parentSnapshot.docs[0];
+                                const parentData = parentDoc.data();
+                                const currentChildren = parentData.childrenIds || [];
+                                if (!currentChildren.includes(newId)) {
+                                    await updateDoc(doc(db, 'users', parentDoc.id), {
+                                        childrenIds: [...currentChildren, newId]
+                                    });
+                                }
+                            }
+                        } catch (syncErr) {
+                            console.error("Failed to sync sibling ID to parent user account:", syncErr);
+                        }
                     } else {
                         throw authError; // For other errors
                     }
@@ -191,9 +208,10 @@ export default function StudentsPage() {
 
                 // Send Dual Credentials via email to the Parent
                 try {
+                    const idToken = await auth.currentUser?.getIdToken();
                     await fetch('/api/send-credentials', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'x-api-secret': process.env.NEXT_PUBLIC_API_SECRET },
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
                         body: JSON.stringify({
                             to: form.parentEmail,
                             name: form.parentName || form.name,
@@ -339,7 +357,26 @@ export default function StudentsPage() {
                                     studentId: null,
                                 });
                             } catch (authErr) {
-                                if (authErr.code !== 'auth/email-already-in-use') {
+                                if (authErr.code === 'auth/email-already-in-use') {
+                                    // Parent account already exists (sibling). We must append the new child ID to the parent's childrenIds array
+                                    console.log("Parent account already exists for CSV import, appending child ID");
+                                    try {
+                                        const q = query(collection(db, 'users'), where('email', '==', parentEmail));
+                                        const parentSnapshot = await getDocs(q);
+                                        if (!parentSnapshot.empty) {
+                                            const parentDoc = parentSnapshot.docs[0];
+                                            const parentData = parentDoc.data();
+                                            const currentChildren = parentData.childrenIds || [];
+                                            if (!currentChildren.includes(newId)) {
+                                                await updateDoc(doc(db, 'users', parentDoc.id), {
+                                                    childrenIds: [...currentChildren, newId]
+                                                });
+                                            }
+                                        }
+                                    } catch (syncErr) {
+                                        console.error("Failed to sync sibling ID to parent user account during CSV import:", syncErr);
+                                    }
+                                } else {
                                     console.error(`Parent account creation failed for ${parentEmail}:`, authErr);
                                 }
                             }
@@ -355,9 +392,10 @@ export default function StudentsPage() {
                                 studentData.loginEmail = studentLoginEmail;
                                 
                                 // Send Dual Credentials
+                                const idToken = await auth.currentUser?.getIdToken();
                                 fetch('/api/send-credentials', {
                                     method: 'POST',
-                                    headers: { 'Content-Type': 'application/json', 'x-api-secret': process.env.NEXT_PUBLIC_API_SECRET },
+                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
                                     body: JSON.stringify({
                                         to: parentEmail,
                                         name: row.parentname || row.name,

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "firebase": "^12.10.0",
+    "firebase-admin": "^13.8.0",
     "js-cookie": "^3.0.5",
     "next": "16.1.6",
     "nodemailer": "^8.0.1",

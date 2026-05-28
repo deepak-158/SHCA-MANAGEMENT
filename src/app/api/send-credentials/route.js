@@ -1,5 +1,17 @@
 import nodemailer from 'nodemailer';
 import { NextResponse } from 'next/server';
+import { verifyIdToken } from '@/lib/firebaseAdmin';
+
+function escapeHTML(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;')
+        .replace(/\//g, '&#x2F;');
+}
 
 // Simple in-memory rate limiter (resets on server restart)
 const rateLimitMap = new Map();
@@ -19,16 +31,17 @@ function isRateLimited(ip) {
 
 export async function POST(request) {
     try {
-        // --- Authentication: verify the shared API secret ---
-        const authHeader = request.headers.get('x-api-secret');
-        const apiSecret = process.env.API_SECRET;
-
-        if (!apiSecret) {
-            return NextResponse.json({ error: 'Server misconfigured: API_SECRET not set' }, { status: 500 });
+        // --- Authentication: verify Firebase ID token ---
+        const authHeader = request.headers.get('authorization');
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return NextResponse.json({ error: 'Unauthorized: Missing auth token' }, { status: 401 });
         }
 
-        if (authHeader !== apiSecret) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const idToken = authHeader.split('Bearer ')[1];
+        const decodedToken = await verifyIdToken(idToken);
+
+        if (!decodedToken) {
+            return NextResponse.json({ error: 'Unauthorized: Invalid or expired token' }, { status: 401 });
         }
 
         // --- Rate limiting ---
@@ -37,7 +50,17 @@ export async function POST(request) {
             return NextResponse.json({ error: 'Too many requests. Try again later.' }, { status: 429 });
         }
 
-        const { to, name, email, tempPassword, role, studentName, studentEmail, studentPassword, parentEmail, parentPassword } = await request.json();
+        const body = await request.json();
+        const to = body.to; // recipient email format should not have entities
+        const name = escapeHTML(body.name);
+        const email = escapeHTML(body.email);
+        const tempPassword = escapeHTML(body.tempPassword);
+        const role = escapeHTML(body.role);
+        const studentName = escapeHTML(body.studentName);
+        const studentEmail = escapeHTML(body.studentEmail);
+        const studentPassword = escapeHTML(body.studentPassword);
+        const parentEmail = escapeHTML(body.parentEmail);
+        const parentPassword = escapeHTML(body.parentPassword);
 
         if (!to) {
             return NextResponse.json({ error: 'Missing recipient email' }, { status: 400 });

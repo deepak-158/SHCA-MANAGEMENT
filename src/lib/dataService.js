@@ -1,5 +1,5 @@
 import { db } from './firebase';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 
 // --- Classes & Sections ---
 
@@ -83,7 +83,28 @@ export const updateStudent = async (id, studentData) => {
 };
 
 export const deleteStudent = async (id) => {
-    return await deleteDoc(doc(db, 'students', id));
+    const batch = writeBatch(db);
+    
+    // 1. Delete the student document
+    batch.delete(doc(db, 'students', id));
+    
+    // 2. Query and delete their specific results
+    const resultsQ = query(collection(db, 'results'), where('studentId', '==', id));
+    const resultsSnap = await getDocs(resultsQ);
+    resultsSnap.forEach(d => batch.delete(doc(db, 'results', d.id)));
+    
+    // 3. Query and delete their fee payments
+    const feesQ = query(collection(db, 'feePayments'), where('studentId', '==', id));
+    const feesSnap = await getDocs(feesQ);
+    feesSnap.forEach(d => batch.delete(doc(db, 'feePayments', d.id)));
+
+    // 4. Query and delete leave requests
+    const leavesQ = query(collection(db, 'leaveRequests'), where('studentId', '==', id));
+    const leavesSnap = await getDocs(leavesQ);
+    leavesSnap.forEach(d => batch.delete(doc(db, 'leaveRequests', d.id)));
+    
+    // Commit atomically
+    return await batch.commit();
 };
 
 // --- Calendar ---
@@ -277,12 +298,12 @@ export const getResultsForClassSection = async (examId, classId, sectionId) => {
 };
 
 export const saveResults = async (examId, classId, sectionId, resultsArray) => {
-    const batch = [];
+    const batch = writeBatch(db);
     for (const result of resultsArray) {
         const resultId = result.id || `${examId}_${result.studentId}`;
-        batch.push(setDoc(doc(db, 'results', resultId), { ...result, updatedAt: serverTimestamp() }, { merge: true }));
+        batch.set(doc(db, 'results', resultId), { ...result, updatedAt: serverTimestamp() }, { merge: true });
     }
-    return await Promise.all(batch);
+    return await batch.commit();
 };
 
 // --- Student Leave Submission ---

@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/Toast';
 import { formatDate } from '@/lib/utils';
 import { FiCheck, FiX } from 'react-icons/fi';
 import { getLeaveRequests, updateLeaveStatus, getStudents, getClasses } from '@/lib/dataService';
+import { addNotification } from '@/lib/communicationService';
 
 export default function TeacherLeavePage() {
     const toast = useToast();
@@ -62,6 +63,20 @@ export default function TeacherLeavePage() {
         try {
             const remarks = `${status} by Class Teacher`;
             await updateLeaveStatus(id, status, remarks);
+
+            // Fetch the specific leave details to get the studentId
+            const leaveReq = leaves.find(l => l.id === id);
+            if (leaveReq && leaveReq.studentId) {
+                try {
+                    await addNotification(leaveReq.studentId, {
+                        title: `Leave Request ${status}`,
+                        message: `Your leave request for ${formatDate(leaveReq.startDate)} has been ${status.toLowerCase()}.`,
+                        type: 'leave_update'
+                    });
+                } catch (notifErr) {
+                    console.error("Failed to write real-time notification alert:", notifErr);
+                }
+            }
 
             // Update local state without full refetch
             setLeaves(leaves.map(l =>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getNotifications, markNotificationRead, markAllNotificationsRead } from '@/lib/communicationService';
 import { FiBell, FiCheck, FiX } from 'react-icons/fi';
@@ -12,13 +12,24 @@ export default function NotificationBell() {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
 
+    const fetchNotifications = useCallback(async () => {
+        if (!user?.uid) return;
+        try {
+            const notifs = await getNotifications(user.uid);
+            setNotifications(notifs.slice(0, 20));
+            setUnreadCount(notifs.filter(n => !n.isRead).length);
+        } catch (err) {
+            console.error('Failed to load notifications:', err);
+        }
+    }, [user?.uid]);
+
     useEffect(() => {
         if (!user?.uid) return;
         fetchNotifications();
         // Poll every 30 seconds
         const interval = setInterval(fetchNotifications, 30000);
         return () => clearInterval(interval);
-    }, [user]);
+    }, [user?.uid, fetchNotifications]);
 
     useEffect(() => {
         const handleClickOutside = (e) => {
@@ -30,27 +41,23 @@ export default function NotificationBell() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const fetchNotifications = async () => {
-        try {
-            const notifs = await getNotifications(user.uid);
-            setNotifications(notifs.slice(0, 20));
-            setUnreadCount(notifs.filter(n => !n.isRead).length);
-        } catch (e) { /* silent */ }
-    };
-
-    const handleMarkRead = async (id, e) => {
-        e.stopPropagation();
+    const handleMarkRead = async (id, ev) => {
+        ev.stopPropagation();
         try {
             await markNotificationRead(id);
             fetchNotifications();
-        } catch (e) { /* silent */ }
+        } catch (err) {
+            console.error('Failed to mark notification as read:', err);
+        }
     };
 
     const handleMarkAllRead = async () => {
         try {
             await markAllNotificationsRead(user.uid);
             fetchNotifications();
-        } catch (e) { /* silent */ }
+        } catch (err) {
+            console.error('Failed to mark all notifications as read:', err);
+        }
     };
 
     const getTimeAgo = (timestamp) => {

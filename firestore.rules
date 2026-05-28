@@ -67,9 +67,15 @@ service cloud.firestore {
 
 
     match /students/{studentId} {
-      // The app queries all students and filters locally (client-side).
-      // So every authenticated user needs permission to read the collection.
-      allow read: if isSchoolUser();
+      // Admins and Teachers can read all student profiles.
+      // Students can only read their own profile.
+      // Parents can only read their specific children's profiles.
+      allow read: if isAuth() && (
+        isAdmin() ||
+        isTeacher() ||
+        (isStudent() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentId == studentId) ||
+        (isParent() && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.email == resource.data.parentEmail || request.auth.token.email == resource.data.parentEmail))
+      );
       allow create, update: if isAdmin();
       allow delete: if isAdmin();
     }
@@ -164,7 +170,12 @@ service cloud.firestore {
     match /feePayments/{docId} {
       allow read: if isSchoolUser();
       allow create: if isAdmin();
-      allow update: if isAdmin() || isSchoolUser(); // Allow simulated online payments
+      // Allow simulated payments only if the student or parent owns the payment record
+      allow update: if isAuth() && (
+        isAdmin() ||
+        (isParent() && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.email == get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.parentEmail || request.auth.token.email == get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.parentEmail)) ||
+        (isStudent() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentId == resource.data.studentId)
+      );
       allow delete: if isAdmin();
     }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Modal from '@/components/ui/Modal';
 import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiDollarSign, FiDownload, FiUsers, FiAlertCircle } from 'react-icons/fi';
@@ -125,15 +125,22 @@ export default function AdminFeesPage() {
     };
 
     // Filter payments
-    const filteredPayments = payments.filter(p => {
-        const matchSearch = !searchQuery || p.studentName?.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchClass = !filterClass || p.classId === filterClass;
-        return matchSearch && matchClass;
-    });
+    const filteredPayments = useMemo(() => {
+        return payments.filter(p => {
+            const matchSearch = !searchQuery || p.studentName?.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchClass = !filterClass || p.classId === filterClass;
+            return matchSearch && matchClass;
+        });
+    }, [payments, searchQuery, filterClass]);
 
     // Revenue stats
-    const totalCollected = payments.filter(p => p.status === 'Paid').reduce((s, p) => s + (p.paidAmount || p.amount || 0), 0);
-    const totalPending = defaulters.reduce((s, d) => s + ((d.amount || 0) - (d.paidAmount || 0)), 0);
+    const totalCollected = useMemo(() => {
+        return payments.filter(p => p.status === 'Paid').reduce((s, p) => s + (p.paidAmount || p.amount || 0), 0);
+    }, [payments]);
+
+    const totalPending = useMemo(() => {
+        return defaulters.reduce((s, d) => s + ((d.amount || 0) - (d.paidAmount || 0)), 0);
+    }, [defaulters]);
 
     const tabs = [
         { key: 'structure', label: '💰 Fee Structure' },
