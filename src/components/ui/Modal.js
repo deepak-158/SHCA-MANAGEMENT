@@ -5,14 +5,28 @@ import { FiX } from 'react-icons/fi';
 
 export default function Modal({ isOpen, onClose, title, children, footer, size = 'default' }) {
     const modalRef = useRef(null);
+    const onCloseRef = useRef(onClose);
+    const hasAutoFocused = useRef(false);
+
+    // Keep the onClose ref up-to-date without triggering useEffect re-runs
+    useEffect(() => {
+        onCloseRef.current = onClose;
+    }, [onClose]);
+
+    // Reset auto-focus tracker when modal closes
+    useEffect(() => {
+        if (!isOpen) {
+            hasAutoFocused.current = false;
+        }
+    }, [isOpen]);
 
     useEffect(() => {
         if (!isOpen) return;
 
-        // Escape Key Listener
+        // Escape Key Listener — uses ref so this effect doesn't depend on onClose identity
         const handleKeyDown = (e) => {
             if (e.key === 'Escape') {
-                onClose();
+                onCloseRef.current();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -20,14 +34,14 @@ export default function Modal({ isOpen, onClose, title, children, footer, size =
         // Focus Trap and initial focus
         const focusableElementsString = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
         const modalElement = modalRef.current;
-        let focusableElements = [];
-        if (modalElement) {
-            focusableElements = Array.from(modalElement.querySelectorAll(focusableElementsString));
-        }
-        
-        // Focus the first focusable element (or close button)
-        if (focusableElements.length > 0) {
-            focusableElements[0].focus();
+
+        // Only auto-focus on initial open, not on every re-render
+        if (!hasAutoFocused.current && modalElement) {
+            const focusableElements = Array.from(modalElement.querySelectorAll(focusableElementsString));
+            if (focusableElements.length > 0) {
+                focusableElements[0].focus();
+            }
+            hasAutoFocused.current = true;
         }
 
         const handleFocusTrap = (e) => {
@@ -64,7 +78,7 @@ export default function Modal({ isOpen, onClose, title, children, footer, size =
             modalElement?.removeEventListener('keydown', handleFocusTrap);
             document.body.style.overflow = originalStyle;
         };
-    }, [isOpen, onClose]);
+    }, [isOpen]);
 
     if (!isOpen) return null;
 

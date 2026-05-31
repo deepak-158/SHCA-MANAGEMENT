@@ -51,8 +51,8 @@ export default function TeachersPage() {
     };
 
     const filtered = teachers.filter(t =>
-        t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.email.toLowerCase().includes(searchQuery.toLowerCase())
+        t.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (t.email || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     // Compute classes assigned via timetable for a given teacher
@@ -358,7 +358,7 @@ export default function TeachersPage() {
                                 </td>
                                 <td>
                                     <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-                                        {teacher.subjectsTaught.map(s => (
+                                        {(teacher.subjectsTaught || []).map(s => (
                                             <span key={s} className="badge badge-info">{s}</span>
                                         ))}
                                     </div>

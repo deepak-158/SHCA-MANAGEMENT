@@ -109,7 +109,7 @@ export default function AdminAnnouncementsPage() {
                                     {ann.targetRoles?.length > 0 ? ann.targetRoles.map(r => (
                                         <span key={r} className="badge badge-neutral">{r}</span>
                                     )) : <span className="badge badge-primary">All Users</span>}
-                                    <span style={{ color: 'var(--color-text-muted)' }}>• {ann.createdAt?.toDate ? ann.createdAt.toDate().toLocaleDateString('en-IN') : 'Just now'}</span>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>• {ann.createdAt?.toDate ? ann.createdAt.toDate().toLocaleDateString('en-IN') : ann.createdAt ? new Date(ann.createdAt).toLocaleDateString('en-IN') : 'Just now'}</span>
                                 </div>
                             </div>
                             <div style={{ display: 'flex', gap: '0.25rem' }}>

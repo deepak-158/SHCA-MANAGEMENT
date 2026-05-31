@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/ui/Toast';
 import { formatDate, formatDateInput } from '@/lib/utils';
@@ -14,11 +14,8 @@ export default function StudentLeavePage() {
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    useEffect(() => {
-        if (user) fetchLeaves();
-    }, [user]);
-
-    const fetchLeaves = async () => {
+    const fetchLeaves = useCallback(async () => {
+        if (!user) return;
         try {
             const data = await getLeaveRequests();
             const myLeaves = data.filter(l => l.studentId === user.studentId || l.studentId === user.uid || l.studentId === user.id);
@@ -29,7 +26,11 @@ export default function StudentLeavePage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [user, toast]);
+
+    useEffect(() => {
+        fetchLeaves();
+    }, [fetchLeaves]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();

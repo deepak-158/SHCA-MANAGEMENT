@@ -28,10 +28,15 @@ export default function LeavePage() {
                 getLeaves(), getStudents(), getClasses()
             ]);
             // Sort leaves to show pending first, then newest
+            const toDate = (val) => {
+                if (!val) return new Date(0);
+                if (val.toDate) return val.toDate(); // Firestore Timestamp
+                return new Date(val); // string or Date
+            };
             lData.sort((a, b) => {
                 if (a.status === 'Pending' && b.status !== 'Pending') return -1;
                 if (a.status !== 'Pending' && b.status === 'Pending') return 1;
-                return new Date(b.createdAt || b.startDate) - new Date(a.createdAt || a.startDate);
+                return toDate(b.createdAt || b.startDate) - toDate(a.createdAt || a.startDate);
             });
             setLeaves(lData);
             setStudents(stData);
